@@ -1,0 +1,1 @@
+CSV import screen is prepared in the UI. The next data-integration step will parse CSV rows and insert them into the authenticated clinic's leads table using server-side validation.
