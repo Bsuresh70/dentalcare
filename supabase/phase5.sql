@@ -151,3 +151,42 @@ $$;
 grant execute on function public.convert_opportunity(uuid,numeric) to authenticated;
 grant execute on function public.create_followup_from_appointment(uuid,text) to authenticated;
 grant execute on function public.mark_followup_status(uuid,text) to authenticated;
+
+
+-- Clinic onboarding: atomically create a clinic and make the signed-in user its owner.
+create or replace function public.create_clinic_for_current_user(
+  p_name text,
+  p_phone text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_clinic uuid;
+begin
+  if v_user is null then
+    raise exception 'You must be signed in to create a clinic.';
+  end if;
+
+  if exists(select 1 from public.clinic_users where user_id=v_user) then
+    raise exception 'Your account is already linked to a clinic.';
+  end if;
+
+  insert into public.clinics(name, phone)
+  values(trim(p_name), nullif(trim(coalesce(p_phone,'')), ''))
+  returning id into v_clinic;
+
+  insert into public.profiles(id, full_name)
+  values(v_user, coalesce(split_part((select email from auth.users where id=v_user),'@',1),'Clinic Owner'))
+  on conflict (id) do nothing;
+
+  insert into public.clinic_users(clinic_id,user_id,role)
+  values(v_clinic,v_user,'CLINIC_OWNER');
+
+  return v_clinic;
+end;
+$$;
+
+grant execute on function public.create_clinic_for_current_user(text,text) to authenticated;
