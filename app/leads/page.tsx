@@ -58,6 +58,13 @@ export default function Leads(){
     if(!supabase)return;
     const next=lead.status==='NEW'?'CONTACTED':lead.status==='CONTACTED'?'QUALIFIED':lead.status==='QUALIFIED'?'BOOKED':lead.status==='BOOKED'?'CONVERTED':lead.status;
     if(next===lead.status)return;
+    if(next==='CONVERTED'){
+      const {error}=await supabase.rpc('convert_lead_to_patient',{p_lead_id:lead.id});
+      if(error){setStatus(error.message);return;}
+      setStatus('Lead converted to patient successfully.');
+      load();
+      return;
+    }
     const {error}=await supabase.from('leads').update({status:next,last_contacted_at:new Date().toISOString()}).eq('id',lead.id);
     if(error){setStatus(error.message);return;}
     setStatus('Lead status updated.');
@@ -94,7 +101,7 @@ export default function Leads(){
         <td><strong>{l.name}</strong><small>{l.phone||'No phone'}</small></td>
         <td>{l.source||'—'}</td><td>{l.enquiry||'—'}</td><td>₹{Number(l.estimated_value||0).toLocaleString('en-IN')}</td>
         <td><span className={'badge '+l.status.toLowerCase()}>{l.status}</span></td>
-        <td><button className="tableButton" onClick={()=>advance(l)} disabled={!['NEW','CONTACTED','QUALIFIED','BOOKED'].includes(l.status)}>Advance</button></td>
+        <td>{l.status==='CONVERTED' ? <Link className="tableButton" href="/patients">View patient</Link> : <button className="tableButton" onClick={()=>advance(l)} disabled={!['NEW','CONTACTED','QUALIFIED','BOOKED'].includes(l.status)}>{l.status==='BOOKED'?'Convert to patient':'Advance'}</button>}</td>
       </tr>)}</tbody></table></div></section>
   </main>
 }
