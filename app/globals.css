@@ -17,3 +17,22 @@
 .calendarValue{font-weight:700}
 .emptyCalendar{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
 @media(max-width:800px){.calendarItem{grid-template-columns:70px 1fr}.calendarValue,.calendarItem>.badge{justify-self:start}}
+
+/* Patient matching */
+.matchingPanel{margin-bottom:18px}
+.matchingForm{display:grid;gap:22px}
+.formSection{display:grid;gap:12px}
+.formSection h3{margin:0}
+.formGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.formSection textarea{min-height:90px;resize:vertical}
+.matchGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.matchCard{border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:7px}
+.matchTop{display:flex;justify-content:space-between;align-items:center}
+.matchRank{font-weight:800}
+.matchScore{font-weight:800}
+.matchCard h3{margin:4px 0 0}
+.matchCard small{color:var(--muted)}
+.matchFacts{display:grid;gap:6px;margin:8px 0;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.matchActions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:1000px){.formGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.matchGrid{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.formGrid,.matchGrid{grid-template-columns:1fr}}
