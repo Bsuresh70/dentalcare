@@ -5,7 +5,9 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentClinicId } from '../../lib/clinic';
 
 type Patient={id:string;full_name:string;phone:string|null};
-type Appointment={id:string;patient_id:string|null;scheduled_at:string;status:string;estimated_value:number;notes:string|null;patients?:Patient|null};
+type Dentist={id:string;name:string;specialty:string|null;active:boolean};
+type Service={id:string;name:string;default_price:number|null;active:boolean};
+type Appointment={id:string;patient_id:string|null;dentist_id:string|null;service_id:string|null;scheduled_at:string;status:string;estimated_value:number;notes:string|null;patients?:Patient|null;dentist?:Dentist|null;service?:Service|null};
 
 const STATUSES=['SCHEDULED','CONFIRMED','COMPLETED','NO_SHOW','CANCELLED'];
 
@@ -14,10 +16,12 @@ const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency
 export default function Appointments(){
   const [clinicId,setClinicId]=useState<string|null>(null);
   const [patients,setPatients]=useState<Patient[]>([]);
+  const [dentists,setDentists]=useState<Dentist[]>([]);
+  const [services,setServices]=useState<Service[]>([]);
   const [appointments,setAppointments]=useState<Appointment[]>([]);
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(true);
-  const [form,setForm]=useState({patientId:'',date:'',time:'10:00',value:'0',notes:''});
+  const [form,setForm]=useState({patientId:'',dentistId:'',serviceId:'',date:'',time:'10:00',value:'0',notes:''});
 
   async function load(){
     if(!supabase) return;
@@ -25,16 +29,22 @@ export default function Appointments(){
     const id=await getCurrentClinicId();
     setClinicId(id);
     if(!id){setLoading(false);return;}
-    const [{data:ps},{data:as,error}] = await Promise.all([
+    const [{data:ps},{data:ds},{data:ss},{data:as,error}] = await Promise.all([
       supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id).order('full_name'),
-      supabase.from('appointments').select('id,patient_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
+      supabase.from('dentists').select('id,name,specialty,active').eq('clinic_id',id).eq('active',true).order('name'),
+      supabase.from('services').select('id,name,default_price,active').eq('clinic_id',id).eq('active',true).order('name'),
+      supabase.from('appointments').select('id,patient_id,dentist_id,service_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
     ]);
     if(error) setStatus(error.message);
     const patientRows=(ps||[]) as Patient[];
+    const dentistRows=(ds||[]) as Dentist[];
+    const serviceRows=(ss||[]) as Service[];
     const patientById=new Map(patientRows.map(p=>[p.id,p]));
-    const appointmentRows=(as||[]) as Omit<Appointment,'patients'>[];
-    setPatients(patientRows);
-    setAppointments(appointmentRows.map(a=>({...a,patients:a.patient_id?patientById.get(a.patient_id)||null:null})));
+    const dentistById=new Map(dentistRows.map(d=>[d.id,d]));
+    const serviceById=new Map(serviceRows.map(s=>[s.id,s]));
+    const appointmentRows=(as||[]) as Omit<Appointment,'patients'|'dentist'|'service'>[];
+    setPatients(patientRows);setDentists(dentistRows);setServices(serviceRows);
+    setAppointments(appointmentRows.map(a=>({...a,patients:a.patient_id?patientById.get(a.patient_id)||null:null,dentist:a.dentist_id?dentistById.get(a.dentist_id)||null:null,service:a.service_id?serviceById.get(a.service_id)||null:null})));
     setLoading(false);
   }
 
@@ -51,11 +61,11 @@ export default function Appointments(){
     if(!supabase||!clinicId||!form.patientId||!form.date||!form.time){setStatus('Select a patient, date and time.');return;}
     const scheduledAt=new Date(form.date+'T'+form.time).toISOString();
     const {error}=await supabase.from('appointments').insert({
-      clinic_id:clinicId,patient_id:form.patientId,scheduled_at:scheduledAt,status:'SCHEDULED',
+      clinic_id:clinicId,patient_id:form.patientId,dentist_id:form.dentistId||null,service_id:form.serviceId||null,scheduled_at:scheduledAt,status:'SCHEDULED',
       estimated_value:Number(form.value)||0,notes:form.notes||null
     });
     if(error) setStatus(error.message);
-    else {setStatus('Appointment created.');setForm({patientId:'',date:'',time:'10:00',value:'0',notes:''});load();}
+    else {setStatus('Appointment created.');setForm({patientId:'',dentistId:'',serviceId:'',date:'',time:'10:00',value:'0',notes:''});load();}
   }
 
   async function updateStatus(a:Appointment,next:string){
@@ -105,10 +115,11 @@ export default function Appointments(){
     </section>
 
     <section className="panel"><div className="tableWrap">
-      <table><thead><tr><th>Patient</th><th>Date / time</th><th>Value</th><th>Status</th><th>Recovery</th></tr></thead>
-      <tbody>{loading?<tr><td colSpan={5}>Loading appointments…</td></tr>:appointments.length===0?<tr><td colSpan={5}>No appointments yet. Create your first appointment above.</td></tr>:appointments.map(a=><tr key={a.id}>
+      <table><thead><tr><th>Patient</th><th>Date / time</th><th>Dentist / service</th><th>Value</th><th>Status</th><th>Recovery</th></tr></thead>
+      <tbody>{loading?<tr><td colSpan={6}>Loading appointments…</td></tr>:appointments.length===0?<tr><td colSpan={6}>No appointments yet. Create your first appointment above.</td></tr>:appointments.map(a=><tr key={a.id}>
         <td><strong>{a.patients?.full_name||'Unassigned'}</strong><small>{a.patients?.phone||''}</small></td>
         <td>{new Date(a.scheduled_at).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}</td>
+        <td><strong>{a.dentist?.name||'—'}</strong><small>{a.service?.name||'No service selected'}</small></td>
         <td>{money(Number(a.estimated_value||0))}</td>
         <td><select value={a.status} onChange={e=>updateStatus(a,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>
         <td>{a.status==='COMPLETED'?<button className="tableButton" onClick={()=>convertFromAppointment(a)}>Attribute revenue</button>:a.status==='NO_SHOW'||a.status==='CANCELLED'?<span className="badge open">FOLLOW-UP QUEUED</span>:<span className="muted">—</span>}</td>
