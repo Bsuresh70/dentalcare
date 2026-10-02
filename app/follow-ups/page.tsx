@@ -25,9 +25,12 @@ export default function FollowUps(){
     if(!supabase)return;
     const id=await getCurrentClinicId();setClinicId(id);
     if(!id)return;
-    const {data,error}=await supabase.from('followups').select('id,patient_id,lead_id,opportunity_id,channel,scheduled_for,status,message_template,attempts,patients(full_name,phone)').eq('clinic_id',id).order('scheduled_for',{ascending:true});
+    const {data,error}=await supabase.from('followups').select('id,patient_id,lead_id,opportunity_id,channel,scheduled_for,status,message_template,attempts').eq('clinic_id',id).order('scheduled_for',{ascending:true});
     if(error)setStatus(error.message);
-    setItems((data||[]) as Followup[]);
+    const {data:patientRows}=await supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id);
+    const patientById=new Map((patientRows||[]).map(p=>[p.id,p]));
+    const followupRows=(data||[]) as Omit<Followup,'patients'>[];
+    setItems(followupRows.map(f=>({...f,patients:f.patient_id?patientById.get(f.patient_id)||null:null})));
   }
   useEffect(()=>{load()},[]);
 
