@@ -501,6 +501,21 @@ begin
     raise exception 'Clinic not found.';
   end if;
 
+  select ar.id
+  into v_id
+  from public.appointment_requests ar
+  where ar.status='PENDING'
+    and ar.patient_request_id=p_patient_request_id
+    and ar.clinic_id=p_clinic_id
+    and ar.dentist_id is not distinct from p_dentist_id
+    and ar.service_id is not distinct from p_service_id
+  order by ar.created_at asc
+  limit 1;
+
+  if v_id is not null then
+    return v_id;
+  end if;
+
   insert into public.appointment_requests(
     patient_request_id,clinic_id,dentist_id,service_id,
     patient_name,patient_phone,requested_date,requested_period,notes
@@ -553,3 +568,14 @@ $$;
 
 grant execute on function public.respond_to_appointment_request(uuid,text)
 to authenticated;
+
+
+-- Prevent duplicate pending requests for the same patient request and destination.
+create unique index if not exists ux_appointment_requests_pending
+on public.appointment_requests(
+  patient_request_id,
+  clinic_id,
+  dentist_id,
+  service_id
+)
+where status='PENDING';
