@@ -446,3 +446,110 @@ grant execute on function public.create_referral(
 -- ============================================================
 -- Installation complete
 -- ============================================================
+
+
+-- 11. Patient appointment requests
+create table if not exists public.appointment_requests (
+  id uuid primary key default gen_random_uuid(),
+  patient_request_id uuid references public.patient_requests(id) on delete set null,
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  dentist_id uuid references public.dentists(id) on delete set null,
+  service_id uuid references public.services(id) on delete set null,
+  patient_name text not null,
+  patient_phone text,
+  requested_date date,
+  requested_period text,
+  notes text,
+  status text not null default 'PENDING',
+  created_at timestamptz not null default now(),
+  responded_at timestamptz
+);
+
+create index if not exists idx_appointment_requests_clinic
+on public.appointment_requests(clinic_id,status,created_at desc);
+
+alter table public.appointment_requests enable row level security;
+
+drop policy if exists appointment_requests_clinic on public.appointment_requests;
+create policy appointment_requests_clinic on public.appointment_requests
+for all
+using (public.is_clinic_member(clinic_id))
+with check (public.is_clinic_member(clinic_id));
+
+create or replace function public.create_appointment_request(
+  p_patient_request_id uuid,
+  p_clinic_id uuid,
+  p_dentist_id uuid,
+  p_service_id uuid,
+  p_patient_name text,
+  p_patient_phone text,
+  p_requested_date date,
+  p_requested_period text,
+  p_notes text
+) returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  v_id uuid;
+begin
+  if nullif(trim(p_patient_name),'') is null then
+    raise exception 'Patient name is required.';
+  end if;
+  if not exists(select 1 from public.clinics where id=p_clinic_id) then
+    raise exception 'Clinic not found.';
+  end if;
+
+  insert into public.appointment_requests(
+    patient_request_id,clinic_id,dentist_id,service_id,
+    patient_name,patient_phone,requested_date,requested_period,notes
+  )
+  values(
+    p_patient_request_id,p_clinic_id,p_dentist_id,p_service_id,
+    trim(p_patient_name),nullif(trim(coalesce(p_patient_phone,'')),''),
+    p_requested_date,nullif(trim(coalesce(p_requested_period,'')),''),
+    nullif(trim(coalesce(p_notes,'')),'')
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+grant execute on function public.create_appointment_request(
+  uuid,uuid,uuid,uuid,text,text,date,text,text
+) to anon,authenticated;
+
+-- 12. Clinic response to appointment requests
+create or replace function public.respond_to_appointment_request(
+  p_request_id uuid,
+  p_status text
+) returns void
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  v_clinic uuid;
+begin
+  select clinic_id into v_clinic
+  from public.appointment_requests
+  where id=p_request_id;
+
+  if v_clinic is null or not public.is_clinic_member(v_clinic) then
+    raise exception 'You are not authorized to respond to this request.';
+  end if;
+
+  if p_status not in ('ACCEPTED','DECLINED') then
+    raise exception 'Invalid response status.';
+  end if;
+
+  update public.appointment_requests
+  set status=p_status,responded_at=now()
+  where id=p_request_id;
+end;
+$$;
+
+grant execute on function public.respond_to_appointment_request(uuid,text)
+to authenticated;
