@@ -19,6 +19,7 @@ export default function FindDentist(){
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(false);
   const [selected,setSelected]=useState<Match[]>([]);
+  const [requesting,setRequesting]=useState<string|null>(null);
 
   async function search(e:FormEvent){
     e.preventDefault();
@@ -37,6 +38,25 @@ export default function FindDentist(){
     setMatches((rows||[]) as Match[]);
     setStatus(rows?.length?rows.length+' suitable options found.':'No exact matches found. Try a wider location, budget or date.');
     setLoading(false);
+  }
+
+  async function requestAppointment(m:Match){
+    if(!supabase)return;
+    setRequesting(m.dentist_id);
+    const {data:requestId,error:createError}=await supabase.rpc('create_public_patient_request',{
+      p_name:form.name,p_phone:form.phone,p_treatment:form.treatment,p_problem_description:form.problem,
+      p_urgency:form.urgency,p_city:form.city,p_pincode:form.pincode,
+      p_budget_min:form.budgetMin?Number(form.budgetMin):null,p_budget_max:form.budgetMax?Number(form.budgetMax):null,
+      p_preferred_date:form.date||null,p_preferred_period:form.period,p_preference_priority:form.priority
+    });
+    if(createError){setStatus(createError.message);setRequesting(null);return;}
+    const {error}=await supabase.rpc('create_appointment_request',{
+      p_patient_request_id:requestId,p_clinic_id:m.clinic_id,p_dentist_id:m.dentist_id,p_service_id:m.service_id,
+      p_patient_name:form.name,p_patient_phone:form.phone,p_requested_date:form.date||null,
+      p_requested_period:form.period,p_notes:form.problem||null
+    });
+    setStatus(error?error.message:'Appointment request sent to '+m.dentist_name+'. The clinic can now accept or decline the request.');
+    setRequesting(null);
   }
 
   function toggle(m:Match){
@@ -85,9 +105,9 @@ export default function FindDentist(){
       <div className="matchGrid">{matches.map((m,i)=><article className="matchCard" key={m.dentist_id+'-'+m.service_id}>
         <div className="matchTop"><span className="matchRank">{i+1}</span><span className="matchScore">{m.match_score}% match</span></div>
         <h3>{m.dentist_name}</h3><p className="muted">{m.specialty||'Dental practitioner'}</p>
-        <strong>{m.clinic_name}</strong><small>{m.city||'Location not listed'}{m.pincode?' · '+m.pincode:''} · approx. {m.distance_km} km</small>
+        <strong>{m.clinic_name}</strong><small>{m.city||'Location not listed'}{m.pincode?' · '+m.pincode:''}{(m.city||m.pincode)?' · approx. '+m.distance_km+' km':''}</small>
         <div className="matchFacts"><span>🦷 {m.service_name}</span><span>💰 {m.price!=null?'₹'+Number(m.price).toLocaleString('en-IN'):'Price on consultation'}</span><span>🕐 {m.available?'Availability indicated':'Check availability'}</span></div>
-        <div className="matchActions"><button className="tableButton" onClick={()=>toggle(m)}>{selected.some(x=>x.dentist_id===m.dentist_id)?'Remove compare':'Compare'}</button><button className="primary small" onClick={()=>setStatus('Booking request for '+m.dentist_name+' will be connected next.')}>Request appointment</button></div>
+        <div className="matchActions"><button className="tableButton" onClick={()=>toggle(m)}>{selected.some(x=>x.dentist_id===m.dentist_id)?'Remove compare':'Compare'}</button><button className="primary small" disabled={requesting===m.dentist_id} onClick={()=>requestAppointment(m)}>{requesting===m.dentist_id?'Sending…':'Request appointment'}</button></div>
       </article>)}</div>
     </section>}
 
