@@ -179,6 +179,21 @@ begin
     raise exception 'Name and treatment are required.';
   end if;
 
+  select pr.id
+  into v_id
+  from public.patient_requests pr
+  where lower(trim(pr.name))=lower(trim(p_name))
+    and nullif(trim(coalesce(pr.phone,'')),'') is not distinct from nullif(trim(coalesce(p_phone,'')),'')
+    and lower(trim(pr.treatment))=lower(trim(p_treatment))
+    and pr.status='OPEN'
+    and pr.created_at >= now() - interval '30 minutes'
+  order by pr.created_at asc
+  limit 1;
+
+  if v_id is not null then
+    return v_id;
+  end if;
+
   insert into public.patient_requests(
     name,phone,treatment,problem_description,urgency,city,pincode,
     budget_min,budget_max,preferred_date,preferred_period,preference_priority
@@ -191,9 +206,7 @@ begin
     coalesce(nullif(trim(p_urgency),''),'FLEXIBLE'),
     nullif(trim(coalesce(p_city,'')),''),
     nullif(trim(coalesce(p_pincode,'')),''),
-    p_budget_min,
-    p_budget_max,
-    p_preferred_date,
+    p_budget_min,p_budget_max,p_preferred_date,
     nullif(trim(coalesce(p_preferred_period,'')),''),
     coalesce(nullif(trim(p_preference_priority),''),'BALANCED')
   )
