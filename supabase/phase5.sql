@@ -190,3 +190,61 @@ end;
 $$;
 
 grant execute on function public.create_clinic_for_current_user(text,text) to authenticated;
+
+
+-- Convert a qualified/booked lead into a patient atomically.
+-- Existing patients with the same clinic + phone are reused to prevent duplicates.
+create or replace function public.convert_lead_to_patient(p_lead_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  v_lead public.leads;
+  v_patient_id uuid;
+  v_notes text;
+begin
+  select * into v_lead
+  from public.leads
+  where id=p_lead_id
+  for update;
+
+  if v_lead.id is null or not public.is_clinic_member(v_lead.clinic_id) then
+    raise exception 'Lead not found or access denied';
+  end if;
+
+  if v_lead.patient_id is not null then
+    return v_lead.patient_id;
+  end if;
+
+  if nullif(trim(coalesce(v_lead.phone,'')),'') is not null then
+    select id into v_patient_id
+    from public.patients
+    where clinic_id=v_lead.clinic_id
+      and phone=trim(v_lead.phone)
+    order by created_at
+    limit 1;
+  end if;
+
+  v_notes := 'Converted from lead.'
+    || case when nullif(trim(coalesce(v_lead.source,'')),'') is not null then ' Source: '||trim(v_lead.source)||'.' else '' end
+    || case when nullif(trim(coalesce(v_lead.enquiry,'')),'') is not null then ' Enquiry: '||trim(v_lead.enquiry)||'.' else '' end;
+
+  if v_patient_id is null then
+    insert into public.patients(clinic_id, full_name, phone, total_revenue, notes)
+    values(v_lead.clinic_id, trim(v_lead.name), nullif(trim(coalesce(v_lead.phone,'')),''), 0, v_notes)
+    returning id into v_patient_id;
+  end if;
+
+  update public.leads
+  set patient_id=v_patient_id,
+      status='CONVERTED',
+      last_contacted_at=now()
+  where id=v_lead.id;
+
+  return v_patient_id;
+end;
+$$;
+
+grant execute on function public.convert_lead_to_patient(uuid) to authenticated;
