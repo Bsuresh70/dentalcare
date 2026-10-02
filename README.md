@@ -78,3 +78,8 @@ npm run dev
 Open `/login`, create a clinic through onboarding, then use **Appointments** and **Follow-ups**.
 
 > WhatsApp API/n8n delivery is intentionally the next integration layer. Phase 5 does not pretend that a browser WhatsApp deep link is an API integration.
+
+
+## Deployment
+
+This repository is connected to Vercel for deployment from the `main` branch.
