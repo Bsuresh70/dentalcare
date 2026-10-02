@@ -552,20 +552,25 @@ grant execute on function public.create_appointment_request(
 -- 12. Clinic response to appointment requests
 create or replace function public.respond_to_appointment_request(
   p_request_id uuid,
-  p_status text
-) returns void
+  p_status text,
+  p_scheduled_at timestamptz default null
+) returns uuid
 language plpgsql
 security definer
 set search_path=public
 as $$
 declare
-  v_clinic uuid;
+  v_request public.appointment_requests%rowtype;
+  v_patient uuid;
+  v_appointment uuid;
+  v_value numeric := 0;
 begin
-  select clinic_id into v_clinic
+  select * into v_request
   from public.appointment_requests
-  where id=p_request_id;
+  where id=p_request_id
+  for update;
 
-  if v_clinic is null or not public.is_clinic_member(v_clinic) then
+  if v_request.id is null or not public.is_clinic_member(v_request.clinic_id) then
     raise exception 'You are not authorized to respond to this request.';
   end if;
 
@@ -573,14 +578,63 @@ begin
     raise exception 'Invalid response status.';
   end if;
 
+  if p_status='DECLINED' then
+    update public.appointment_requests
+    set status='DECLINED',responded_at=now()
+    where id=p_request_id;
+    return null;
+  end if;
+
+  if p_scheduled_at is null then
+    raise exception 'Please provide an appointment date and time.';
+  end if;
+
+  select id into v_patient
+  from public.patients
+  where clinic_id=v_request.clinic_id
+    and v_request.patient_phone is not null
+    and phone=v_request.patient_phone
+  order by created_at asc
+  limit 1;
+
+  if v_patient is null then
+    insert into public.patients(
+      clinic_id,full_name,phone,total_revenue,notes
+    )
+    values(
+      v_request.clinic_id,
+      v_request.patient_name,
+      nullif(trim(coalesce(v_request.patient_phone,'')),''),
+      0,
+      'Created from DentalConnect appointment request.'
+    )
+    returning id into v_patient;
+  end if;
+
+  select coalesce(default_price,0) into v_value
+  from public.services
+  where id=v_request.service_id
+    and clinic_id=v_request.clinic_id;
+
+  insert into public.appointments(
+    clinic_id,patient_id,dentist_id,service_id,scheduled_at,status,estimated_value,notes
+  )
+  values(
+    v_request.clinic_id,v_patient,v_request.dentist_id,v_request.service_id,
+    p_scheduled_at,'CONFIRMED',coalesce(v_value,0),
+    coalesce(v_request.notes,'Booked from DentalConnect patient request.')
+  )
+  returning id into v_appointment;
+
   update public.appointment_requests
-  set status=p_status,responded_at=now()
+  set status='ACCEPTED',responded_at=now()
   where id=p_request_id;
+
+  return v_appointment;
 end;
 $$;
 
-grant execute on function public.respond_to_appointment_request(uuid,text)
-to authenticated;
+grant execute on function public.respond_to_appointment_request(uuid,text,timestamptz) to authenticated;
 
 
 -- Prevent duplicate pending requests for the same patient request and destination.
