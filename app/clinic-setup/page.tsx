@@ -6,6 +6,7 @@ import { getCurrentClinicId } from '../../lib/clinic';
 
 type Dentist={id:string;name:string;specialty:string|null;phone:string|null;active:boolean};
 type Service={id:string;name:string;category:string|null;default_price:number|null;active:boolean};
+type Clinic={id:string;name:string;phone:string|null;address:string|null;city:string|null;pincode:string|null};
 
 export default function ClinicSetup(){
   const [clinicId,setClinicId]=useState<string|null>(null);
@@ -19,23 +20,37 @@ export default function ClinicSetup(){
   const [price,setPrice]=useState('');
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(true);
+  const [clinic,setClinic]=useState<Clinic|null>(null);
+  const [location,setLocation]=useState({address:'',city:'',pincode:''});
 
   async function load(){
     if(!supabase){setLoading(false);return;}
     const id=await getCurrentClinicId();
     setClinicId(id);
     if(!id){setStatus('Please sign in and create your clinic first.');setLoading(false);return;}
-    const [{data:d,error:de},{data:s,error:se}]=await Promise.all([
+    const [{data:clinicRow},{data:d,error:de},{data:s,error:se}]=await Promise.all([
+      supabase.from('clinics').select('id,name,phone,address,city,pincode').eq('id',id).single(),
       supabase.from('dentists').select('id,name,specialty,phone,active').eq('clinic_id',id).order('name'),
       supabase.from('services').select('id,name,category,default_price,active').eq('clinic_id',id).order('name')
     ]);
     if(de||se) setStatus((de||se)?.message||'Unable to load clinic setup.');
+    setClinic((clinicRow||null) as Clinic|null);
+    setLocation({address:clinicRow?.address||'',city:clinicRow?.city||'',pincode:clinicRow?.pincode||''});
     setDentists((d||[]) as Dentist[]);
     setServices((s||[]) as Service[]);
     setLoading(false);
   }
 
   useEffect(()=>{load()},[]);
+
+  async function saveLocation(e:FormEvent){
+    e.preventDefault();
+    if(!supabase||!clinicId)return;
+    const {error}=await supabase.from('clinics').update({
+      address:location.address.trim()||null,city:location.city.trim()||null,pincode:location.pincode.trim()||null
+    }).eq('id',clinicId);
+    if(error)setStatus(error.message);else setStatus('Clinic location saved.');
+  }
 
   async function addDentist(e:FormEvent){
     e.preventDefault();
@@ -76,6 +91,18 @@ export default function ClinicSetup(){
 
     {status&&<div className="toast">{status}</div>}
     {!supabase&&<div className="toast">Configure Supabase environment variables to use clinic setup.</div>}
+
+    <section className="panel">
+      <div className="panelHead"><div><h3>Clinic location</h3><p className="muted">Used by DentalConnect to match patients with nearby clinics.</p></div></div>
+      <form className="stackForm" onSubmit={saveLocation}>
+        <input placeholder="Clinic address" value={location.address} onChange={e=>setLocation({...location,address:e.target.value})}/>
+        <div className="formGrid">
+          <input placeholder="City" value={location.city} onChange={e=>setLocation({...location,city:e.target.value})}/>
+          <input placeholder="PIN code" value={location.pincode} onChange={e=>setLocation({...location,pincode:e.target.value})}/>
+        </div>
+        <button className="primary small" type="submit">Save clinic location</button>
+      </form>
+    </section>
 
     <section className="grid2">
       <div className="panel">
