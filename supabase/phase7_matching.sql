@@ -250,3 +250,57 @@ $$;
 
 grant execute on function public.create_public_patient_request(text,text,text,text,text,text,text,numeric,numeric,date,text,text) to anon, authenticated;
 grant execute on function public.find_patient_matches(uuid) to anon, authenticated;
+
+
+create or replace function public.get_network_clinics(p_exclude_clinic uuid)
+returns table(clinic_id uuid,clinic_name text,city text,pincode text)
+language sql
+security definer
+set search_path=public
+as $$
+  select id,name,city,pincode
+  from public.clinics
+  where id<>p_exclude_clinic
+  order by name
+  limit 100;
+$$;
+
+create or replace function public.create_referral(
+  p_source_clinic_id uuid,
+  p_target_clinic_id uuid,
+  p_patient_id uuid,
+  p_patient_request_id uuid,
+  p_treatment text,
+  p_reason text,
+  p_referring_dentist_id uuid default null,
+  p_receiving_dentist_id uuid default null,
+  p_notes text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare v_id uuid;
+begin
+  if not public.is_clinic_member(p_source_clinic_id) then
+    raise exception 'You are not a member of the referring clinic.';
+  end if;
+  if p_target_clinic_id=p_source_clinic_id then
+    raise exception 'Referral target must be another clinic.';
+  end if;
+  if nullif(trim(p_treatment),'') is null then
+    raise exception 'Treatment is required.';
+  end if;
+  insert into public.referrals(
+    source_clinic_id,target_clinic_id,patient_id,patient_request_id,
+    referring_dentist_id,receiving_dentist_id,treatment,reason,notes
+  ) values (
+    p_source_clinic_id,p_target_clinic_id,p_patient_id,p_patient_request_id,
+    p_referring_dentist_id,p_receiving_dentist_id,trim(p_treatment),p_reason,p_notes
+  ) returning id into v_id;
+  return v_id;
+end;
+$$;
+
+grant execute on function public.get_network_clinics(uuid) to authenticated;
+grant execute on function public.create_referral(uuid,uuid,uuid,uuid,text,text,uuid,uuid,text) to authenticated;
