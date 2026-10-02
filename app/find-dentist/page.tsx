@@ -71,7 +71,7 @@ export default function FindDentist(){
           <div className="formGrid">
             <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
             <select value={form.period} onChange={e=>setForm({...form,period:e.target.value})}><option>Any time</option><option>Morning</option><option>Afternoon</option><option>Evening</option></select>
-            <select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value)}>{priorities.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+            <select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>{priorities.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
           </div>
           <button className="primary" type="submit" disabled={loading}>{loading?'Finding dentists…':'Find suitable dentists'}</button>
         </div>
