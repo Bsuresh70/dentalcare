@@ -36,3 +36,5 @@
 .matchActions{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:1000px){.formGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.matchGrid{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.formGrid,.matchGrid{grid-template-columns:1fr}}
+
+.referralForm{align-items:end}
