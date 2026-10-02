@@ -35,13 +35,11 @@ export default function Onboarding(){
   async function submit(e:FormEvent){
     e.preventDefault();
     if(!supabase){setStatus('Supabase is not configured.');return;}
+    setStatus('Creating your clinic…');
     const {data:{user}}=await supabase.auth.getUser();
     if(!user){setStatus('Please sign in above first.');return;}
-    const {data:clinic,error}=await supabase.from('clinics').insert({name,phone}).select().single();
+    const {error}=await supabase.rpc('create_clinic_for_current_user',{p_name:name,p_phone:phone||null});
     if(error){setStatus(error.message);return;}
-    await supabase.from('profiles').upsert({id:user.id,full_name:user.email?.split('@')[0]||'Clinic Owner'});
-    const {error:memberError}=await supabase.from('clinic_users').insert({clinic_id:clinic.id,user_id:user.id,role:'CLINIC_OWNER'});
-    if(memberError){setStatus(memberError.message);return;}
     setStatus('Clinic created successfully. Opening your dashboard…');
     setTimeout(()=>router.replace('/'),500);
   }
