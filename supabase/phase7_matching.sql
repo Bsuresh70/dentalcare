@@ -117,3 +117,136 @@ end;
 $$;
 
 grant execute on function public.calculate_match_score(text,text,numeric,boolean,boolean,boolean) to authenticated;
+
+
+create or replace function public.create_public_patient_request(
+  p_name text,
+  p_phone text,
+  p_treatment text,
+  p_problem_description text default null,
+  p_urgency text default 'FLEXIBLE',
+  p_city text default null,
+  p_pincode text default null,
+  p_budget_min numeric default null,
+  p_budget_max numeric default null,
+  p_preferred_date date default null,
+  p_preferred_period text default null,
+  p_preference_priority text default 'BALANCED'
+) returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare v_id uuid;
+begin
+  if nullif(trim(p_name),'') is null or nullif(trim(p_treatment),'') is null then
+    raise exception 'Name and treatment are required.';
+  end if;
+  insert into public.patient_requests(
+    name,phone,treatment,problem_description,urgency,city,pincode,
+    budget_min,budget_max,preferred_date,preferred_period,preference_priority
+  ) values (
+    trim(p_name),nullif(trim(coalesce(p_phone,'')),''),
+    trim(p_treatment),nullif(trim(coalesce(p_problem_description,'')),''),
+    coalesce(nullif(trim(p_urgency),''),'FLEXIBLE'),
+    nullif(trim(coalesce(p_city,'')),''),nullif(trim(coalesce(p_pincode,'')),''),
+    p_budget_min,p_budget_max,p_preferred_date,
+    nullif(trim(coalesce(p_preferred_period,'')),''),
+    coalesce(nullif(trim(p_preference_priority),''),'BALANCED')
+  ) returning id into v_id;
+  return v_id;
+end;
+$$;
+
+create or replace function public.find_patient_matches(p_request_id uuid)
+returns table(
+  dentist_id uuid,
+  dentist_name text,
+  specialty text,
+  clinic_id uuid,
+  clinic_name text,
+  city text,
+  pincode text,
+  service_id uuid,
+  service_name text,
+  price numeric,
+  distance_km numeric,
+  available boolean,
+  specialty_match boolean,
+  budget_fit boolean,
+  match_score integer,
+  earliest_slot timestamptz
+)
+language sql
+security definer
+set search_path=public
+as $$
+with req as (
+  select * from public.patient_requests where id=p_request_id
+),
+candidates as (
+  select
+    d.id dentist_id,d.name dentist_name,d.specialty,
+    c.id clinic_id,c.name clinic_name,c.city,c.pincode,
+    s.id service_id,s.name service_name,s.default_price price,
+    case
+      when r.pincode is not null and c.pincode=r.pincode then 0
+      when r.city is not null and lower(c.city)=lower(r.city) then 5
+      else 15
+    end::numeric distance_km,
+    (
+      s.id is not null
+      and not exists (
+        select 1 from public.appointments a
+        where a.dentist_id=d.id
+          and a.status in ('SCHEDULED','CONFIRMED')
+          and r.preferred_date is not null
+          and a.scheduled_at::date=r.preferred_date
+      )
+    ) available,
+    (
+      lower(coalesce(s.name,'')) like '%'||lower(r.treatment)||'%'
+      or lower(coalesce(s.category,'')) like '%'||lower(r.treatment)||'%'
+      or lower(coalesce(d.specialty,'')) like '%'||lower(r.treatment)||'%'
+      or lower(r.treatment) like '%'||lower(coalesce(s.name,''))||'%'
+    ) specialty_match,
+    (
+      r.budget_min is null or s.default_price is null or s.default_price>=r.budget_min
+    ) and (
+      r.budget_max is null or s.default_price is null or s.default_price<=r.budget_max
+    ) budget_fit,
+    r
+  from public.dentists d
+  join public.clinics c on c.id=d.clinic_id and d.active=true
+  join public.services s on s.clinic_id=c.id and s.active=true
+  cross join req r
+  where
+    (r.city is null or c.city is null or lower(c.city)=lower(r.city))
+    and (r.pincode is null or c.pincode is null or c.pincode=r.pincode)
+),
+ranked as (
+  select *,
+    public.calculate_match_score(
+      r.urgency,r.preference_priority,distance_km,budget_fit,available,specialty_match
+    ) match_score,
+    (
+      case
+        when r.preferred_date is not null then
+          case when available then (r.preferred_date::timestamptz + interval '10 hours') else null end
+        else now()
+      end
+    ) earliest_slot
+  from candidates
+  cross join req r
+  where specialty_match or r.treatment is null
+)
+select dentist_id,dentist_name,specialty,clinic_id,clinic_name,city,pincode,
+       service_id,service_name,price,distance_km,available,specialty_match,
+       budget_fit,match_score,earliest_slot
+from ranked
+order by match_score desc,distance_km asc,price asc
+limit 20;
+$$;
+
+grant execute on function public.create_public_patient_request(text,text,text,text,text,text,text,numeric,numeric,date,text,text) to anon, authenticated;
+grant execute on function public.find_patient_matches(uuid) to anon, authenticated;
