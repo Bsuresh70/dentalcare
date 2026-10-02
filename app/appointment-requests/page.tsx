@@ -15,6 +15,7 @@ export default function AppointmentRequests(){
   const [services,setServices]=useState<Service[]>([]);
   const [status,setStatus]=useState('');
   const [filter,setFilter]=useState('PENDING');
+  const [schedule,setSchedule]=useState<Record<string,{date:string;time:string}>>({});
 
   async function load(){
     if(!supabase)return;
@@ -30,9 +31,24 @@ export default function AppointmentRequests(){
   }
   useEffect(()=>{load()},[]);
 
+  function scheduleFor(r:Request){
+    return schedule[r.id]||{date:r.requested_date||'',time:'10:00'};
+  }
+
   async function respond(id:string,next:'ACCEPTED'|'DECLINED'){
+
     if(!supabase)return;
-    const {error}=await supabase.rpc('respond_to_appointment_request',{p_request_id:id,p_status:next});
+    const current=visible.find(r=>r.id===id);
+    if(next==='ACCEPTED' && current){
+      const s=scheduleFor(current);
+      if(!s.date||!s.time){setStatus('Please select an appointment date and time.');return;}
+      const scheduledAt=new Date(s.date+'T'+s.time).toISOString();
+      const {error}=await supabase.rpc('respond_to_appointment_request',{p_request_id:id,p_status:next,p_scheduled_at:scheduledAt});
+      setStatus(error?error.message:'Request accepted and appointment scheduled.');
+      if(!error)load();
+      return;
+    }
+    const {error}=await supabase.rpc('respond_to_appointment_request',{p_request_id:id,p_status:next,p_scheduled_at:null});
     setStatus(error?error.message:'Request '+next.toLowerCase()+'.');
     if(!error)load();
   }
