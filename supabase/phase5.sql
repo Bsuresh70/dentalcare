@@ -18,26 +18,36 @@ set search_path=public
 as $$
 declare delta numeric := 0;
 begin
-  if NEW.status = 'COMPLETED' and coalesce(OLD.status,'') <> 'COMPLETED' then
-    delta := coalesce(NEW.estimated_value,0);
-    if NEW.patient_id is not null then
+  if TG_OP = 'INSERT' then
+    if NEW.status = 'COMPLETED' and NEW.patient_id is not null then
+      delta := coalesce(NEW.estimated_value,0);
       update public.patients
       set total_revenue = total_revenue + delta,
           last_visit_at = NEW.scheduled_at
       where id = NEW.patient_id;
     end if;
-  elsif NEW.status = 'COMPLETED' and OLD.status = 'COMPLETED'
-        and coalesce(NEW.estimated_value,0) <> coalesce(OLD.estimated_value,0)
-        and NEW.patient_id is not null then
-    delta := coalesce(NEW.estimated_value,0) - coalesce(OLD.estimated_value,0);
-    update public.patients
-    set total_revenue = greatest(0,total_revenue + delta)
-    where id = NEW.patient_id;
-  elsif OLD.status = 'COMPLETED' and NEW.status <> 'COMPLETED'
-        and NEW.patient_id is not null then
-    update public.patients
-    set total_revenue = greatest(0,total_revenue - coalesce(OLD.estimated_value,0))
-    where id = NEW.patient_id;
+  elsif TG_OP = 'UPDATE' then
+    if NEW.status = 'COMPLETED' and coalesce(OLD.status,'') <> 'COMPLETED' then
+      delta := coalesce(NEW.estimated_value,0);
+      if NEW.patient_id is not null then
+        update public.patients
+        set total_revenue = total_revenue + delta,
+            last_visit_at = NEW.scheduled_at
+        where id = NEW.patient_id;
+      end if;
+    elsif NEW.status = 'COMPLETED' and OLD.status = 'COMPLETED'
+          and coalesce(NEW.estimated_value,0) <> coalesce(OLD.estimated_value,0)
+          and NEW.patient_id is not null then
+      delta := coalesce(NEW.estimated_value,0) - coalesce(OLD.estimated_value,0);
+      update public.patients
+      set total_revenue = greatest(0,total_revenue + delta)
+      where id = NEW.patient_id;
+    elsif OLD.status = 'COMPLETED' and NEW.status <> 'COMPLETED'
+          and NEW.patient_id is not null then
+      update public.patients
+      set total_revenue = greatest(0,total_revenue - coalesce(OLD.estimated_value,0))
+      where id = NEW.patient_id;
+    end if;
   end if;
   return NEW;
 end;
