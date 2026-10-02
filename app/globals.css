@@ -38,3 +38,9 @@
 @media(max-width:650px){.formGrid,.matchGrid{grid-template-columns:1fr}}
 
 .referralForm{align-items:end}
+
+.requestGrid{display:grid;gap:12px}
+.requestCard{border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:10px}
+.requestCard>div:first-child{display:grid;gap:3px}
+.requestCard small{color:var(--muted)}
+.requestFacts{display:flex;gap:16px;flex-wrap:wrap}
