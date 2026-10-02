@@ -40,3 +40,41 @@ Apply supabase/schema.sql to a new Supabase project. The schema is designed for 
 5. WhatsApp/n8n automation
 6. AI opportunity scoring and assistant
 7. Dentist-to-dentist referral network
+
+
+## Phase 5 — Appointment & Follow-up Automation
+
+Run these SQL files in Supabase SQL Editor in this order:
+
+1. `supabase/schema.sql`
+2. `supabase/opportunity_engine.sql`
+3. `supabase/phase5.sql`
+
+Then configure:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+Phase 5 adds:
+
+- appointment creation and status tracking
+- completed/no-show/cancelled appointment handling
+- automatic follow-up creation for no-shows and cancellations
+- patient revenue attribution when an appointment becomes COMPLETED
+- opportunity-to-revenue conversion
+- follow-up queue with WhatsApp deep links
+- follow-up history/status tracking
+- clinic-level RLS inherited from the core schema
+
+Start locally:
+
+```bash
+npm install
+npm run dev
+```
+
+Open `/login`, create a clinic through onboarding, then use **Appointments** and **Follow-ups**.
+
+> WhatsApp API/n8n delivery is intentionally the next integration layer. Phase 5 does not pretend that a browser WhatsApp deep link is an API integration.
