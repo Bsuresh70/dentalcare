@@ -115,6 +115,17 @@ export default function Appointments(){
         <option value="">Select patient</option>
         {patients.map(p=><option key={p.id} value={p.id}>{p.full_name}{p.phone?' · '+p.phone:''}</option>)}
       </select>
+      <select value={form.dentistId} onChange={e=>setForm({...form,dentistId:e.target.value})}>
+        <option value="">Select dentist</option>
+        {dentists.map(d=><option key={d.id} value={d.id}>{d.name}{d.specialty?' · '+d.specialty:''}</option>)}
+      </select>
+      <select value={form.serviceId} onChange={e=>{
+        const service=services.find(s=>s.id===e.target.value);
+        setForm({...form,serviceId:e.target.value,value:service?.default_price!=null?String(service.default_price):form.value});
+      }}>
+        <option value="">Select service</option>
+        {services.map(s=><option key={s.id} value={s.id}>{s.name}{s.default_price!=null?' · ₹'+Number(s.default_price).toLocaleString('en-IN'):''}</option>)}
+      </select>
       <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
       <input type="time" value={form.time} onChange={e=>setForm({...form,time:e.target.value})}/>
       <input type="number" min="0" placeholder="Estimated value" value={form.value} onChange={e=>setForm({...form,value:e.target.value})}/>
