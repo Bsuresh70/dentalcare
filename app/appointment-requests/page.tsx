@@ -73,7 +73,11 @@ export default function AppointmentRequests(){
             <div><strong>{r.patient_name}</strong><small>{r.patient_phone||'Phone not provided'}</small></div>
             <div className="requestFacts"><span>🦷 {s?.name||'Service requested'}</span><span>👨‍⚕️ {d?.name||'Any dentist'}</span><span>📅 {r.requested_date?new Date(r.requested_date+'T00:00:00').toLocaleDateString('en-IN'):'Flexible'} · {r.requested_period||'Any time'}</span></div>
             {r.notes&&<p className="muted">{r.notes}</p>}
-            <div className="matchActions">{r.status==='PENDING'?<><button className="primary small" onClick={()=>respond(r.id,'ACCEPTED')}>Accept</button><button className="tableButton" onClick={()=>respond(r.id,'DECLINED')}>Decline</button></>:<span className="badge open">{r.status}</span>}</div>
+            {r.status==='PENDING'&&<div className="scheduleInputs">
+              <label>Appointment date<input type="date" value={scheduleFor(r).date} onChange={e=>setSchedule(x=>({...x,[r.id]:{...scheduleFor(r),date:e.target.value}}))}/></label>
+              <label>Appointment time<input type="time" value={scheduleFor(r).time} onChange={e=>setSchedule(x=>({...x,[r.id]:{...scheduleFor(r),time:e.target.value}}))}/></label>
+            </div>}
+            <div className="matchActions">{r.status==='PENDING'?<><button className="primary small" onClick={()=>respond(r.id,'ACCEPTED')}>Accept & Schedule</button><button className="tableButton" onClick={()=>respond(r.id,'DECLINED')}>Decline</button></>:<span className="badge open">{r.status}</span>}</div>
           </article>
         })}
       </div>
