@@ -135,8 +135,8 @@ export default function Patients() {
                       </td>
                       <td>₹{Number(p.total_revenue || 0).toLocaleString('en-IN')}</td>
                       <td>
-                        <Link className="tableButton" href="/appointments">
-                          Appointments
+                        <Link className="tableButton" href={'/patients/'+p.id}>
+                          View patient
                         </Link>
                       </td>
                     </tr>
