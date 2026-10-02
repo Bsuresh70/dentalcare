@@ -27,11 +27,14 @@ export default function Appointments(){
     if(!id){setLoading(false);return;}
     const [{data:ps},{data:as,error}] = await Promise.all([
       supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id).order('full_name'),
-      supabase.from('appointments').select('id,patient_id,scheduled_at,status,estimated_value,notes,patients(id,full_name,phone)').eq('clinic_id',id).order('scheduled_at',{ascending:false})
+      supabase.from('appointments').select('id,patient_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
     ]);
     if(error) setStatus(error.message);
-    setPatients((ps||[]) as Patient[]);
-    setAppointments((as||[]) as Appointment[]);
+    const patientRows=(ps||[]) as Patient[];
+    const patientById=new Map(patientRows.map(p=>[p.id,p]));
+    const appointmentRows=(as||[]) as Omit<Appointment,'patients'>[];
+    setPatients(patientRows);
+    setAppointments(appointmentRows.map(a=>({...a,patients:a.patient_id?patientById.get(a.patient_id)||null:null})));
     setLoading(false);
   }
 
