@@ -21,6 +21,8 @@ export default function Appointments(){
   const [appointments,setAppointments]=useState<Appointment[]>([]);
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(true);
+  const [selectedDate,setSelectedDate]=useState(new Date().toISOString().slice(0,10));
+  const [calendarDentist,setCalendarDentist]=useState('ALL');
   const [form,setForm]=useState({patientId:'',dentistId:'',serviceId:'',date:'',time:'10:00',value:'0',notes:''});
 
   async function load(){
@@ -56,6 +58,12 @@ export default function Appointments(){
     cancelled:appointments.filter(a=>a.status==='CANCELLED').length,
     completedValue:appointments.filter(a=>a.status==='COMPLETED').reduce((s,a)=>s+Number(a.estimated_value||0),0)
   }),[appointments]);
+
+  const dayAppointments=useMemo(()=>appointments.filter(a=>{
+    const local=new Date(a.scheduled_at);
+    const key=local.getFullYear()+'-'+String(local.getMonth()+1).padStart(2,'0')+'-'+String(local.getDate()).padStart(2,'0');
+    return key===selectedDate && (calendarDentist==='ALL'||a.dentist_id===calendarDentist);
+  }).sort((a,b)=>new Date(a.scheduled_at).getTime()-new Date(b.scheduled_at).getTime()),[appointments,selectedDate,calendarDentist]);
 
   async function createAppointment(){
     if(!supabase||!clinicId||!form.patientId||!form.date||!form.time){setStatus('Select a patient, date and time.');return;}
@@ -112,6 +120,32 @@ export default function Appointments(){
       <input type="number" min="0" placeholder="Estimated value" value={form.value} onChange={e=>setForm({...form,value:e.target.value})}/>
       <input placeholder="Notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/>
       <button className="primary small" onClick={createAppointment}>Create appointment</button>
+    </section>
+
+    <section className="panel calendarPanel">
+      <div className="panelHead">
+        <div><h3>Daily calendar</h3><p className="muted">See the clinic schedule by date and dentist.</p></div>
+        <div className="calendarControls">
+          <button className="tableButton" onClick={()=>setSelectedDate(new Date(Date.now()-86400000).toISOString().slice(0,10))}>Yesterday</button>
+          <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
+          <button className="tableButton" onClick={()=>setSelectedDate(new Date().toISOString().slice(0,10))}>Today</button>
+          <select value={calendarDentist} onChange={e=>setCalendarDentist(e.target.value)}>
+            <option value="ALL">All dentists</option>
+            {dentists.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="calendarList">
+        {dayAppointments.length===0 ? <div className="emptyCalendar">No appointments for this selection.</div> : dayAppointments.map(a=>{
+          const time=new Date(a.scheduled_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+          return <div className="calendarItem" key={a.id}>
+            <div className="calendarTime">{time}</div>
+            <div className="calendarPatient"><strong>{a.patients?.full_name||'Unassigned'}</strong><small>{a.service?.name||'Service not selected'}{a.dentist?.name?' · '+a.dentist.name:''}</small></div>
+            <div className="calendarValue">{money(Number(a.estimated_value||0))}</div>
+            <span className="badge open">{a.status}</span>
+          </div>;
+        })}
+      </div>
     </section>
 
     <section className="panel"><div className="tableWrap">
