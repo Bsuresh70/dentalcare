@@ -1,6 +1,10 @@
--- DentalConnect Phase 7: Patient matching + referral network
--- Run this migration in Supabase SQL Editor after deploying the app.
+-- ============================================================
+-- DentalConnect Phase 7 - COMPLETE INSTALLATION
+-- Patient Matching + Dentist Referral Network
+-- Safe to run more than once.
+-- ============================================================
 
+-- 1. Clinic/dentist/service information used by matching
 alter table public.clinics add column if not exists address text;
 alter table public.clinics add column if not exists city text;
 alter table public.clinics add column if not exists pincode text;
@@ -15,6 +19,7 @@ alter table public.dentists add column if not exists consultation_fee numeric(12
 alter table public.services add column if not exists description text;
 alter table public.services add column if not exists duration_minutes integer default 30;
 
+-- 2. Patient requests
 create table if not exists public.patient_requests (
   id uuid primary key default gen_random_uuid(),
   patient_id uuid references public.patients(id) on delete set null,
@@ -38,6 +43,7 @@ create table if not exists public.patient_requests (
   created_at timestamptz not null default now()
 );
 
+-- 3. Dentist-to-dentist referrals
 create table if not exists public.referrals (
   id uuid primary key default gen_random_uuid(),
   source_clinic_id uuid not null references public.clinics(id) on delete cascade,
@@ -55,32 +61,59 @@ create table if not exists public.referrals (
   completed_at timestamptz
 );
 
-create index if not exists idx_patient_requests_status on public.patient_requests(status,created_at desc);
-create index if not exists idx_patient_requests_pincode on public.patient_requests(pincode);
-create index if not exists idx_referrals_source on public.referrals(source_clinic_id,status);
-create index if not exists idx_referrals_target on public.referrals(target_clinic_id,status);
+create index if not exists idx_patient_requests_status
+on public.patient_requests(status,created_at desc);
 
+create index if not exists idx_patient_requests_pincode
+on public.patient_requests(pincode);
+
+create index if not exists idx_referrals_source
+on public.referrals(source_clinic_id,status);
+
+create index if not exists idx_referrals_target
+on public.referrals(target_clinic_id,status);
+
+-- 4. Security
 alter table public.patient_requests enable row level security;
 alter table public.referrals enable row level security;
 
 drop policy if exists patient_requests_clinic on public.patient_requests;
 create policy patient_requests_clinic on public.patient_requests
-for all using (
+for all
+using (
   (clinic_id is not null and public.is_clinic_member(clinic_id))
-  or (patient_id is not null and exists(select 1 from public.patients p where p.id=patient_id and public.is_clinic_member(p.clinic_id)))
-) with check (
+  or
+  (patient_id is not null and exists (
+    select 1
+    from public.patients p
+    where p.id=patient_id
+      and public.is_clinic_member(p.clinic_id)
+  ))
+)
+with check (
   (clinic_id is not null and public.is_clinic_member(clinic_id))
-  or (patient_id is not null and exists(select 1 from public.patients p where p.id=patient_id and public.is_clinic_member(p.clinic_id)))
+  or
+  (patient_id is not null and exists (
+    select 1
+    from public.patients p
+    where p.id=patient_id
+      and public.is_clinic_member(p.clinic_id)
+  ))
 );
 
 drop policy if exists referrals_member on public.referrals;
 create policy referrals_member on public.referrals
-for all using (
-  public.is_clinic_member(source_clinic_id) or public.is_clinic_member(target_clinic_id)
-) with check (
-  public.is_clinic_member(source_clinic_id) and public.is_clinic_member(target_clinic_id)
+for all
+using (
+  public.is_clinic_member(source_clinic_id)
+  or public.is_clinic_member(target_clinic_id)
+)
+with check (
+  public.is_clinic_member(source_clinic_id)
+  and public.is_clinic_member(target_clinic_id)
 );
 
+-- 5. Matching score
 create or replace function public.calculate_match_score(
   p_urgency text,
   p_priority text,
@@ -89,7 +122,9 @@ create or replace function public.calculate_match_score(
   p_availability boolean,
   p_specialty_match boolean
 ) returns integer
-language plpgsql immutable as $$
+language plpgsql
+immutable
+as $$
 declare
   s integer := 0;
 begin
@@ -112,13 +147,12 @@ begin
   end if;
 
   if p_urgency = 'ASAP' and p_availability then s := s + 5; end if;
+
   return least(s,100);
 end;
 $$;
 
-grant execute on function public.calculate_match_score(text,text,numeric,boolean,boolean,boolean) to authenticated;
-
-
+-- 6. Public patient request creation
 create or replace function public.create_public_patient_request(
   p_name text,
   p_phone text,
@@ -137,27 +171,39 @@ language plpgsql
 security definer
 set search_path=public
 as $$
-declare v_id uuid;
+declare
+  v_id uuid;
 begin
-  if nullif(trim(p_name),'') is null or nullif(trim(p_treatment),'') is null then
+  if nullif(trim(p_name),'') is null
+     or nullif(trim(p_treatment),'') is null then
     raise exception 'Name and treatment are required.';
   end if;
+
   insert into public.patient_requests(
     name,phone,treatment,problem_description,urgency,city,pincode,
     budget_min,budget_max,preferred_date,preferred_period,preference_priority
-  ) values (
-    trim(p_name),nullif(trim(coalesce(p_phone,'')),''),
-    trim(p_treatment),nullif(trim(coalesce(p_problem_description,'')),''),
+  )
+  values(
+    trim(p_name),
+    nullif(trim(coalesce(p_phone,'')),''),
+    trim(p_treatment),
+    nullif(trim(coalesce(p_problem_description,'')),''),
     coalesce(nullif(trim(p_urgency),''),'FLEXIBLE'),
-    nullif(trim(coalesce(p_city,'')),''),nullif(trim(coalesce(p_pincode,'')),''),
-    p_budget_min,p_budget_max,p_preferred_date,
+    nullif(trim(coalesce(p_city,'')),''),
+    nullif(trim(coalesce(p_pincode,'')),''),
+    p_budget_min,
+    p_budget_max,
+    p_preferred_date,
     nullif(trim(coalesce(p_preferred_period,'')),''),
     coalesce(nullif(trim(p_preference_priority),''),'BALANCED')
-  ) returning id into v_id;
+  )
+  returning id into v_id;
+
   return v_id;
 end;
 $$;
 
+-- 7. Patient matching
 create or replace function public.find_patient_matches(p_request_id uuid)
 returns table(
   dentist_id uuid,
@@ -183,7 +229,6 @@ set search_path=public
 as $$
 with req as (
   select
-    pr.id,
     pr.treatment,
     pr.urgency,
     pr.preference_priority,
@@ -207,35 +252,39 @@ candidates as (
     s.id as service_id,
     s.name as service_name,
     s.default_price as price,
+
     case
       when r.pincode is not null and c.pincode=r.pincode then 0
       when r.city is not null and lower(c.city)=lower(r.city) then 5
       else 15
     end::numeric as distance_km,
-    (
-      not exists (
-        select 1
-        from public.appointments a
-        where a.dentist_id=d.id
-          and a.status in ('SCHEDULED','CONFIRMED')
-          and r.preferred_date is not null
-          and a.scheduled_at::date=r.preferred_date
-      )
+
+    not exists (
+      select 1
+      from public.appointments a
+      where a.dentist_id=d.id
+        and a.status in ('SCHEDULED','CONFIRMED')
+        and r.preferred_date is not null
+        and a.scheduled_at::date=r.preferred_date
     ) as available,
+
     (
       lower(coalesce(s.name,'')) like '%'||lower(r.treatment)||'%'
       or lower(coalesce(s.category,'')) like '%'||lower(r.treatment)||'%'
       or lower(coalesce(d.specialty,'')) like '%'||lower(r.treatment)||'%'
       or lower(r.treatment) like '%'||lower(coalesce(s.name,''))||'%'
     ) as specialty_match,
+
     (
       (r.budget_min is null or s.default_price is null or s.default_price>=r.budget_min)
       and
       (r.budget_max is null or s.default_price is null or s.default_price<=r.budget_max)
     ) as budget_fit,
+
     r.urgency as request_urgency,
     r.preference_priority as request_priority,
     r.preferred_date as request_date
+
   from public.dentists d
   join public.clinics c
     on c.id=d.clinic_id
@@ -244,26 +293,15 @@ candidates as (
     on s.clinic_id=c.id
    and s.active=true
   cross join req r
+
   where
     (r.city is null or c.city is null or lower(c.city)=lower(r.city))
-    and (r.pincode is null or c.pincode is null or c.pincode=r.pincode)
+    and
+    (r.pincode is null or c.pincode is null or c.pincode=r.pincode)
 ),
 ranked as (
   select
-    x.dentist_id,
-    x.dentist_name,
-    x.specialty,
-    x.clinic_id,
-    x.clinic_name,
-    x.city,
-    x.pincode,
-    x.service_id,
-    x.service_name,
-    x.price,
-    x.distance_km,
-    x.available,
-    x.specialty_match,
-    x.budget_fit,
+    x.*,
     public.calculate_match_score(
       x.request_urgency,
       x.request_priority,
@@ -271,14 +309,7 @@ ranked as (
       x.budget_fit,
       x.available,
       x.specialty_match
-    ) as match_score,
-    case
-      when x.request_date is not null and x.available
-        then x.request_date::timestamptz + interval '10 hours'
-      when x.request_date is null
-        then now()
-      else null
-    end as earliest_slot
+    ) as calculated_score
   from candidates x
   where x.specialty_match
 )
@@ -297,30 +328,45 @@ select
   r.available,
   r.specialty_match,
   r.budget_fit,
-  r.match_score,
-  r.earliest_slot
+  r.calculated_score as match_score,
+  case
+    when r.request_date is not null and r.available
+      then r.request_date::timestamptz + interval '10 hours'
+    when r.request_date is null
+      then now()
+    else null
+  end as earliest_slot
 from ranked r
-order by r.match_score desc, r.distance_km asc, r.price asc nulls last
+order by r.calculated_score desc,
+         r.distance_km asc,
+         r.price asc nulls last
 limit 20;
 $$;
 
-grant execute on function public.create_public_patient_request(text,text,text,text,text,text,text,numeric,numeric,date,text,text) to anon, authenticated;
-grant execute on function public.find_patient_matches(uuid) to anon, authenticated;
-
-
+-- 8. Network clinics
 create or replace function public.get_network_clinics(p_exclude_clinic uuid)
-returns table(clinic_id uuid,clinic_name text,city text,pincode text)
+returns table(
+  clinic_id uuid,
+  clinic_name text,
+  city text,
+  pincode text
+)
 language sql
 security definer
 set search_path=public
 as $$
-  select id,name,city,pincode
-  from public.clinics
-  where id<>p_exclude_clinic
-  order by name
+  select
+    c.id,
+    c.name,
+    c.city,
+    c.pincode
+  from public.clinics c
+  where c.id<>p_exclude_clinic
+  order by c.name
   limit 100;
 $$;
 
+-- 9. Create referral
 create or replace function public.create_referral(
   p_source_clinic_id uuid,
   p_target_clinic_id uuid,
@@ -336,27 +382,67 @@ language plpgsql
 security definer
 set search_path=public
 as $$
-declare v_id uuid;
+declare
+  v_id uuid;
 begin
   if not public.is_clinic_member(p_source_clinic_id) then
     raise exception 'You are not a member of the referring clinic.';
   end if;
+
   if p_target_clinic_id=p_source_clinic_id then
     raise exception 'Referral target must be another clinic.';
   end if;
+
   if nullif(trim(p_treatment),'') is null then
     raise exception 'Treatment is required.';
   end if;
+
   insert into public.referrals(
-    source_clinic_id,target_clinic_id,patient_id,patient_request_id,
-    referring_dentist_id,receiving_dentist_id,treatment,reason,notes
-  ) values (
-    p_source_clinic_id,p_target_clinic_id,p_patient_id,p_patient_request_id,
-    p_referring_dentist_id,p_receiving_dentist_id,trim(p_treatment),p_reason,p_notes
-  ) returning id into v_id;
+    source_clinic_id,
+    target_clinic_id,
+    patient_id,
+    patient_request_id,
+    referring_dentist_id,
+    receiving_dentist_id,
+    treatment,
+    reason,
+    notes
+  )
+  values(
+    p_source_clinic_id,
+    p_target_clinic_id,
+    p_patient_id,
+    p_patient_request_id,
+    p_referring_dentist_id,
+    p_receiving_dentist_id,
+    trim(p_treatment),
+    p_reason,
+    p_notes
+  )
+  returning id into v_id;
+
   return v_id;
 end;
 $$;
 
-grant execute on function public.get_network_clinics(uuid) to authenticated;
-grant execute on function public.create_referral(uuid,uuid,uuid,uuid,text,text,uuid,uuid,text) to authenticated;
+-- 10. Permissions
+grant execute on function public.calculate_match_score(text,text,numeric,boolean,boolean,boolean)
+to anon,authenticated;
+
+grant execute on function public.create_public_patient_request(
+  text,text,text,text,text,text,text,numeric,numeric,date,text,text
+) to anon,authenticated;
+
+grant execute on function public.find_patient_matches(uuid)
+to anon,authenticated;
+
+grant execute on function public.get_network_clinics(uuid)
+to authenticated;
+
+grant execute on function public.create_referral(
+  uuid,uuid,uuid,uuid,text,text,uuid,uuid,text
+) to authenticated;
+
+-- ============================================================
+-- Installation complete
+-- ============================================================
