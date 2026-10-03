@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentClinicId } from '../../lib/clinic';
 
-type Followup={id:string;patient_id:string|null;lead_id:string|null;opportunity_id:string|null;channel:string;scheduled_for:string;status:string;message_template:string|null;attempts:number;patients?:{full_name:string;phone:string|null}|null};
+type Followup={id:string;patient_id:string|null;lead_id:string|null;opportunity_id:string|null;channel:string;scheduled_for:string;status:string;message_template:string|null;attempts:number;patients?:{full_name:string;phone:string|null}|null;leads?:{full_name:string;phone:string|null}|null};
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
 
@@ -28,9 +28,14 @@ export default function FollowUps(){
     const {data,error}=await supabase.from('followups').select('id,patient_id,lead_id,opportunity_id,channel,scheduled_for,status,message_template,attempts').eq('clinic_id',id).order('scheduled_for',{ascending:true});
     if(error)setStatus(error.message);
     const {data:patientRows}=await supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id);
+    const {data:leadRows}=await supabase.from('leads').select('id,full_name,phone').eq('clinic_id',id);
     const patientById=new Map((patientRows||[]).map(p=>[p.id,p]));
-    const followupRows=(data||[]) as Omit<Followup,'patients'>[];
-    setItems(followupRows.map(f=>({...f,patients:f.patient_id?patientById.get(f.patient_id)||null:null})));
+    const leadById=new Map((leadRows||[]).map(l=>[l.id,l]));
+    const followupRows=(data||[]) as Omit<Followup,'patients'|'leads'>[];
+    setItems(followupRows.map(f=>({...f,
+      patients:f.patient_id?patientById.get(f.patient_id)||null:null,
+      leads:f.lead_id?leadById.get(f.lead_id)||null:null
+    })));
   }
   useEffect(()=>{load()},[]);
 
@@ -44,7 +49,7 @@ export default function FollowUps(){
   }
 
   async function sendViaWhatsApp(f:Followup){
-    const url=whatsappUrl(f.patients?.phone||null,f.message_template);
+    const url=whatsappUrl(f.patients?.phone||f.leads?.phone||null,f.message_template);
     if(!url){setStatus('No valid patient phone number is available.');return;}
     window.open(url,'_blank','noopener,noreferrer');
     await mark(f.id,'SENT');
@@ -64,7 +69,7 @@ export default function FollowUps(){
     </section>
     <section className="panel"><div className="tableWrap"><table><thead><tr><th>Patient</th><th>Due</th><th>Channel</th><th>Message</th><th>Status</th><th>Action</th></tr></thead><tbody>
       {visible.length===0?<tr><td colSpan={6}>No follow-ups in this view.</td></tr>:visible.map(f=><tr key={f.id}>
-        <td><strong>{f.patients?.full_name||'Patient'}</strong><small>{f.patients?.phone||'No phone'}</small></td>
+        <td><strong>{f.patients?.full_name||f.leads?.full_name||'Patient'}</strong><small>{f.patients?.phone||f.leads?.phone||'No phone'}</small></td>
         <td>{new Date(f.scheduled_for).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}</td>
         <td>{f.channel}</td>
         <td style={{whiteSpace:'normal',minWidth:280}}>{f.message_template||'No message template'}</td>
