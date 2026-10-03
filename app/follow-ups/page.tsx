@@ -55,7 +55,7 @@ export default function FollowUps(){
     const url=whatsappUrl(f.patients?.phone||f.leads?.phone||null,f.message_template);
     if(!url){setStatus('No valid patient phone number is available.');return;}
     window.open(url,'_blank','noopener,noreferrer');
-    await mark(f.id,'SENT');
+    setStatus('WhatsApp opened. Send the message manually, then return here and click Mark sent.');
   }
 
   return <main className="page">
@@ -80,6 +80,7 @@ export default function FollowUps(){
         <td>
           {f.status==='PENDING'&&<div style={{display:'flex',gap:6}}>
             <button className="tableButton" onClick={()=>sendViaWhatsApp(f)}>WhatsApp</button>
+            <button className="tableButton" onClick={()=>mark(f.id,'SENT')}>Mark sent</button>
             <button className="tableButton" onClick={()=>mark(f.id,'COMPLETED')}>Done</button>
           </div>}
           {f.status==='SENT'&&<button className="tableButton" onClick={()=>mark(f.id,'COMPLETED')}>Mark complete</button>}
