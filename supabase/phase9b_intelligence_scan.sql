@@ -1,3 +1,5 @@
+alter table public.automation_runs add column if not exists opportunities_created integer not null default 0;
+
 -- DentalCare Phase 9B: Periodic Intelligence Scan + Diagnostics
 -- Run after phase9_automation.sql.
 
