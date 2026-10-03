@@ -245,3 +245,38 @@ end;
 $$;
 
 grant execute on function public.release_nri_case(uuid) to authenticated;
+
+
+-- Unassigned lead pool: only non-identifying case summary is exposed before a clinic claims it.
+create or replace function public.get_nri_case_pool(p_clinic_id uuid)
+returns table(
+  id uuid,
+  treatment_need text,
+  urgency text,
+  preferred_india_city text,
+  travel_start date,
+  travel_end date,
+  lead_score integer,
+  created_at timestamptz,
+  us_state text
+)
+language sql
+security definer
+set search_path=public
+as $$
+  select
+    n.id,n.treatment_need,n.urgency,n.preferred_india_city,
+    n.travel_start,n.travel_end,n.lead_score,n.created_at,n.us_state
+  from public.nri_dental_cases n
+  join public.clinics c on c.id=p_clinic_id
+  where n.assigned_clinic_id is null
+    and (
+      n.preferred_india_city is null
+      or c.city is null
+      or lower(n.preferred_india_city)=lower(c.city)
+    )
+  order by n.lead_score desc,n.created_at asc
+  limit 100;
+$$;
+
+grant execute on function public.get_nri_case_pool(uuid) to authenticated;
