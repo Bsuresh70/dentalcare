@@ -202,6 +202,7 @@ begin
   where clinic_id=p_clinic_id and status='PENDING';
 
   -- No-show/cancellation recovery. One pending action per appointment.
+  -- Reconcile the appointment-specific opportunity and create exactly one pending action.
   insert into public.followups(clinic_id,patient_id,opportunity_id,channel,scheduled_for,status,message_template)
   select a.clinic_id,a.patient_id,o.id,'WHATSAPP',
          greatest(coalesce(a.scheduled_at,now()) + interval '30 minutes',now()),
