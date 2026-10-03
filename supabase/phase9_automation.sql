@@ -291,3 +291,35 @@ language sql security definer set search_path=public as $$
 $$;
 
 grant execute on function public.get_automation_summary(uuid) to authenticated;
+
+
+-- Server-side scheduler entry point. Keep this callable only by service_role.
+create or replace function public.run_all_clinic_automation()
+returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare
+  c record;
+  total_actions integer := 0;
+  total_clinics integer := 0;
+  total_events integer := 0;
+begin
+  for c in select id from public.clinics loop
+    begin
+      perform public.run_clinic_automation(c.id);
+      total_clinics := total_clinics + 1;
+    exception when others then
+      -- One clinic failure must not stop the scheduler for every other clinic.
+      perform public.log_automation_event(c.id,'AUTOMATION_ERROR',null,null,jsonb_build_object('error',sqlerrm),'SCHEDULER');
+    end;
+  end loop;
+  select count(*) into total_actions
+  from public.followups
+  where status='PENDING' and created_at >= now()-interval '2 minutes';
+  select count(*) into total_events
+  from public.automation_events
+  where created_at >= now()-interval '2 minutes';
+  return jsonb_build_object('status','COMPLETED','clinics_processed',total_clinics,'actions_created',total_actions,'events_logged',total_events);
+end $$;
+
+revoke all on function public.run_all_clinic_automation() from public;
+grant execute on function public.run_all_clinic_automation() to service_role;
