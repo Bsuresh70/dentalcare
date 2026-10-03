@@ -83,7 +83,7 @@ export default function FollowUps(){
             <button className="tableButton" onClick={()=>mark(f.id,'SENT')}>Mark sent</button>
             <button className="tableButton" onClick={()=>mark(f.id,'COMPLETED')}>Done</button>
           </div>}
-          {f.status==='SENT'&&<button className="tableButton" onClick={()=>mark(f.id,'COMPLETED')}>Mark complete</button>}
+          {f.status==='SENT'&&<div style={{display:'flex',gap:6}}><button className="tableButton" onClick={()=>mark(f.id,'PENDING')}>Reopen</button><button className="tableButton" onClick={()=>mark(f.id,'COMPLETED')}>Mark complete</button></div>}
         </td>
       </tr>)}</tbody></table></div></section>
     <div className="patientNote"><strong>Automation boundary</strong><span>Phase 5 prepares and records the action. WhatsApp API/n8n automation can be connected next without changing the clinic data model.</span></div>
