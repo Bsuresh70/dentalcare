@@ -206,6 +206,10 @@ begin
     raise exception 'You are not a member of this clinic.';
   end if;
 
+  if not exists(select 1 from public.nri_dental_cases where id=p_case_id and consent_to_share_case=true) then
+    raise exception 'This patient has not consented to case sharing with clinics.';
+  end if;
+
   update public.nri_dental_cases
   set assigned_clinic_id=p_clinic_id,
       assigned_dentist_id=p_dentist_id,
@@ -270,6 +274,7 @@ as $$
   from public.nri_dental_cases n
   join public.clinics c on c.id=p_clinic_id
   where n.assigned_clinic_id is null
+    and n.consent_to_share_case=true
     and (
       n.preferred_india_city is null
       or c.city is null
