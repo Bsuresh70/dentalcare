@@ -10,8 +10,11 @@ const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency
 
 function whatsappUrl(phone:string|null,message:string|null){
   if(!phone) return null;
-  const digits=phone.replace(/\D/g,'');
+  let digits=phone.replace(/\D/g,'');
   if(!digits) return null;
+  // Indian clinic default: convert a local 10-digit mobile number to WhatsApp E.164 format.
+  if(digits.length===10) digits='91'+digits;
+  else if(digits.length===11 && digits.startsWith('0')) digits='91'+digits.slice(1);
   return 'https://wa.me/'+digits+'?text='+encodeURIComponent(message||'');
 }
 
