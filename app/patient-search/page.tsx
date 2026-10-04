@@ -83,6 +83,7 @@ export default function PatientSearch(){
 
     if(reqId){
       const params=new URLSearchParams({
+        requestId:String(reqId),
         name,
         phone,
         treatment,
