@@ -40,10 +40,44 @@ export default function Autopilot(){
     if(data) console.log(data);
   }
 
+  async function testWeeklyScheduler(){
+    if(!supabase)return;
+    setMessage('Testing the protected weekly scheduler…');
+    const {data:sessionData}=await supabase.auth.getSession();
+    const token=sessionData.session?.access_token;
+
+    if(!token){
+      setMessage('Your login session could not be found. Please sign in again.');
+      return;
+    }
+
+    const response=await fetch('/api/automation/test',{
+      method:'POST',
+      headers:{Authorization:'Bearer '+token}
+    });
+    const result=await response.json();
+
+    if(!response.ok){
+      setMessage(result.error||'Scheduler test failed.');
+      return;
+    }
+
+    const discovered=result.directory?.discovered;
+    setMessage(
+      result.directory?.status==='COMPLETED'
+        ? `Weekly scheduler test completed successfully. Hyderabad directory discovered ${discovered ?? 0} providers.`
+        : 'Weekly scheduler test completed, but directory refresh was not completed.'
+    );
+    await load();
+  }
+
   return <main className="page">
     <header className="pageHead">
       <div><p className="eyebrow">AUTONOMOUS OPERATIONS</p><h1>DentalCare Autopilot</h1><p className="muted">Events become opportunities, follow-ups and next actions without manual data chasing.</p></div>
-      <button className="primaryButton" onClick={run} disabled={!clinicId}>Run Autopilot Now</button>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'flex-end'}}>
+        <button className="secondaryButton" onClick={testWeeklyScheduler} disabled={!clinicId}>Test Weekly Scheduler</button>
+        <button className="primaryButton" onClick={run} disabled={!clinicId}>Run Autopilot Now</button>
+      </div>
     </header>
     {message&&<div className="toast">{message}</div>}
     {!supabase&&<div className="toast">Configure Supabase environment variables first.</div>}
