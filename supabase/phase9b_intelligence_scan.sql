@@ -24,7 +24,7 @@ declare
   v_open_leads integer;
   v_missed integer;
 begin
-  if not public.is_clinic_member(p_clinic_id) then
+  if auth.role() <> 'service_role' and not public.is_clinic_member(p_clinic_id) then
     raise exception 'Not authorized.';
   end if;
 
@@ -132,7 +132,7 @@ declare
   v_scan jsonb;
   v_events integer := 0;
 begin
-  if not public.is_clinic_member(p_clinic_id) then raise exception 'Not authorized.'; end if;
+  if auth.role() <> 'service_role' and not public.is_clinic_member(p_clinic_id) then raise exception 'Not authorized.'; end if;
 
   insert into public.automation_runs(clinic_id,status)
   values(p_clinic_id,'RUNNING') returning id into v_run;
