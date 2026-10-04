@@ -71,7 +71,7 @@ export default function PatientSearch(){
     const treatment=detected.treatment||'dental consultation';
     const {data:reqId}=await supabase.rpc('create_public_patient_request',{
       p_name:name,p_phone:phone,p_treatment:treatment,p_problem_description:query,
-      p_urgency:intent.urgency,p_city:city,p_pincode:pincode,
+      p_urgency:detected.urgency,p_city:city,p_pincode:pincode,
       p_budget_min:null,p_budget_max:budget?Number(budget):null,
       p_preferred_date:null,p_preferred_period:'Any time',p_preference_priority:'BALANCED'
     });
@@ -81,7 +81,19 @@ export default function PatientSearch(){
       : 'Your enquiry is captured. We will help you find suitable dentists.');
     setLoading(false);
 
-    if(reqId) window.location.href='/find-dentist';
+    if(reqId){
+      const params=new URLSearchParams({
+        name,
+        phone,
+        treatment,
+        problem:query,
+        urgency:detected.urgency,
+        city,
+        pincode,
+        budgetMax:budget
+      });
+      window.location.href='/find-dentist?'+params.toString();
+    }
   }
 
   return <main className="page">
