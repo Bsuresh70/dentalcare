@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
 type Match={
@@ -20,6 +21,40 @@ export default function FindDentist(){
   const [loading,setLoading]=useState(false);
   const [selected,setSelected]=useState<Match[]>([]);
   const [requesting,setRequesting]=useState<string|null>(null);
+  const searchParams=useSearchParams();
+  const [requestId,setRequestId]=useState<string|null>(null);
+
+  useEffect(()=>{
+    const id=searchParams.get('requestId');
+    const treatment=searchParams.get('treatment')||'';
+    if(!id||!treatment)return;
+    const next={
+      name:searchParams.get('name')||'',
+      phone:searchParams.get('phone')||'',
+      treatment,
+      problem:searchParams.get('problem')||'',
+      urgency:searchParams.get('urgency')||'FLEXIBLE',
+      city:searchParams.get('city')||'',
+      pincode:searchParams.get('pincode')||'',
+      budgetMin:'',
+      budgetMax:searchParams.get('budgetMax')||'',
+      date:'',
+      period:'Any time',
+      priority:'BALANCED'
+    };
+    setForm(next);
+    setRequestId(id);
+    setLoading(true);
+    setStatus('AI has understood your requirement. Finding suitable dentists…');
+    supabase?.rpc('find_patient_matches',{p_request_id:id}).then(({data,error})=>{
+      if(error){setStatus(error.message);}
+      else{
+        setMatches((data||[]) as Match[]);
+        setStatus(data?.length?data.length+' suitable options found.':'No exact matches found. Try a wider location, budget or date.');
+      }
+      setLoading(false);
+    });
+  },[searchParams]);
 
   async function search(e:FormEvent){
     e.preventDefault();
@@ -33,6 +68,7 @@ export default function FindDentist(){
       p_preferred_date:form.date||null,p_preferred_period:form.period,p_preference_priority:form.priority
     });
     if(error){setStatus(error.message);setLoading(false);return;}
+    setRequestId(id);
     const {data:rows,error:me}=await supabase.rpc('find_patient_matches',{p_request_id:id});
     if(me){setStatus(me.message);setLoading(false);return;}
     setMatches((rows||[]) as Match[]);
@@ -43,15 +79,20 @@ export default function FindDentist(){
   async function requestAppointment(m:Match){
     if(!supabase)return;
     setRequesting(m.dentist_id);
-    const {data:requestId,error:createError}=await supabase.rpc('create_public_patient_request',{
-      p_name:form.name,p_phone:form.phone,p_treatment:form.treatment,p_problem_description:form.problem,
-      p_urgency:form.urgency,p_city:form.city,p_pincode:form.pincode,
-      p_budget_min:form.budgetMin?Number(form.budgetMin):null,p_budget_max:form.budgetMax?Number(form.budgetMax):null,
-      p_preferred_date:form.date||null,p_preferred_period:form.period,p_preference_priority:form.priority
-    });
-    if(createError){setStatus(createError.message);setRequesting(null);return;}
+    let activeRequestId=requestId;
+    if(!activeRequestId){
+      const {data:newRequestId,error:createError}=await supabase.rpc('create_public_patient_request',{
+        p_name:form.name,p_phone:form.phone,p_treatment:form.treatment,p_problem_description:form.problem,
+        p_urgency:form.urgency,p_city:form.city,p_pincode:form.pincode,
+        p_budget_min:form.budgetMin?Number(form.budgetMin):null,p_budget_max:form.budgetMax?Number(form.budgetMax):null,
+        p_preferred_date:form.date||null,p_preferred_period:form.period,p_preference_priority:form.priority
+      });
+      if(createError){setStatus(createError.message);setRequesting(null);return;}
+      activeRequestId=newRequestId;
+      setRequestId(newRequestId);
+    }
     const {error}=await supabase.rpc('create_appointment_request',{
-      p_patient_request_id:requestId,p_clinic_id:m.clinic_id,p_dentist_id:m.dentist_id,p_service_id:m.service_id,
+      p_patient_request_id:activeRequestId,p_clinic_id:m.clinic_id,p_dentist_id:m.dentist_id,p_service_id:m.service_id,
       p_patient_name:form.name,p_patient_phone:form.phone,p_requested_date:form.date||null,
       p_requested_period:form.period,p_notes:form.problem||null
     });
