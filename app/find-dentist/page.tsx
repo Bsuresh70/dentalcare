@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
 type Match={
@@ -21,23 +20,23 @@ export default function FindDentist(){
   const [loading,setLoading]=useState(false);
   const [selected,setSelected]=useState<Match[]>([]);
   const [requesting,setRequesting]=useState<string|null>(null);
-  const searchParams=useSearchParams();
   const [requestId,setRequestId]=useState<string|null>(null);
 
   useEffect(()=>{
-    const id=searchParams.get('requestId');
-    const treatment=searchParams.get('treatment')||'';
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('requestId');
+    const treatment=params.get('treatment')||'';
     if(!id||!treatment)return;
     const next={
-      name:searchParams.get('name')||'',
-      phone:searchParams.get('phone')||'',
+      name:params.get('name')||'',
+      phone:params.get('phone')||'',
       treatment,
-      problem:searchParams.get('problem')||'',
-      urgency:searchParams.get('urgency')||'FLEXIBLE',
-      city:searchParams.get('city')||'',
-      pincode:searchParams.get('pincode')||'',
+      problem:params.get('problem')||'',
+      urgency:params.get('urgency')||'FLEXIBLE',
+      city:params.get('city')||'',
+      pincode:params.get('pincode')||'',
       budgetMin:'',
-      budgetMax:searchParams.get('budgetMax')||'',
+      budgetMax:params.get('budgetMax')||'',
       date:'',
       period:'Any time',
       priority:'BALANCED'
@@ -54,7 +53,7 @@ export default function FindDentist(){
       }
       setLoading(false);
     });
-  },[searchParams]);
+  },[]);
 
   async function search(e:FormEvent){
     e.preventDefault();
