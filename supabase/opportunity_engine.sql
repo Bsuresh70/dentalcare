@@ -99,4 +99,4 @@ $$;
 -- opportunities with the actual estimated value instead of inventing value here.
 
 revoke all on function public.generate_clinic_opportunities(uuid) from public;
-grant execute on function public.generate_clinic_opportunities(uuid) to authenticated;
+grant execute on function public.generate_clinic_opportunities(uuid) to authenticated, service_role;
