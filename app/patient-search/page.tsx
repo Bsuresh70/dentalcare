@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 
@@ -19,21 +19,10 @@ const treatments=[
   {label:'Second opinion',keywords:['second opinion','review my treatment','another opinion']}
 ];
 
-function detectIntent(text:string){
-  const q=text.toLowerCase();
-  const found=treatments.find(t=>t.keywords.some(k=>q.includes(k)));
-  let urgency='FLEXIBLE';
-  if(/severe|unbearable|swelling|bleeding|emergency|cannot sleep|can't sleep/.test(q)) urgency='ASAP';
-  else if(/today|right now|immediately/.test(q)) urgency='TODAY';
-  else if(/this week|soon/.test(q)) urgency='THIS_WEEK';
-
-  let score=35;
-  if(found) score+=35;
-  if(/price|cost|fee|budget|cheap|affordable/.test(q)) score+=5;
-  if(/book|appointment|dentist|clinic|doctor|treatment/.test(q)) score+=15;
-  if(urgency!=='FLEXIBLE') score+=10;
-
-  return {treatment:found?.label||'',urgency,intentScore:Math.min(score,100)};
+async function detectIntent(query:string){
+  const response=await fetch('/api/patient-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})});
+  if(!response.ok) throw new Error('Intent analysis failed');
+  return response.json();
 }
 
 export default function PatientSearch(){
@@ -47,7 +36,7 @@ export default function PatientSearch(){
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(false);
 
-  const intent=useMemo(()=>detectIntent(query),[query]);
+  const [intent,setIntent]=useState({treatment:'',urgency:'FLEXIBLE',intentScore:0,summary:'',ai:false,provider:''});
 
   async function submit(e:FormEvent){
     e.preventDefault();
@@ -58,17 +47,20 @@ export default function PatientSearch(){
 
     setLoading(true);
     setStatus('AI is understanding your requirement and preparing suitable dentist options…');
+    let detected;
+    try{ detected=await detectIntent(query); setIntent(detected); }
+    catch{ setStatus('AI analysis was unavailable. Please try again.'); setLoading(false); return; }
 
     const {data,error}=await supabase.rpc('capture_patient_search_intent',{
       p_search_query:query,
-      p_detected_treatment:intent.treatment||'Dental consultation',
-      p_detected_urgency:intent.urgency,
+      p_detected_treatment:detected.treatment||'Dental consultation',
+      p_detected_urgency:detected.urgency,
       p_name:name,
       p_phone:phone,
       p_city:city,
       p_pincode:pincode,
       p_budget_max:budget?Number(budget):null,
-      p_intent_score:intent.intentScore,
+      p_intent_score:detected.intentScore,
       p_source:'ORGANIC',
       p_landing_page:'/patient-search',
       p_consent_to_contact:consent
@@ -76,7 +68,7 @@ export default function PatientSearch(){
 
     if(error){setStatus(error.message);setLoading(false);return;}
 
-    const treatment=intent.treatment||'dental consultation';
+    const treatment=detected.treatment||'dental consultation';
     const {data:reqId}=await supabase.rpc('create_public_patient_request',{
       p_name:name,p_phone:phone,p_treatment:treatment,p_problem_description:query,
       p_urgency:intent.urgency,p_city:city,p_pincode:pincode,
