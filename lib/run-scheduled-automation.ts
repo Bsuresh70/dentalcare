@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { discoverHyderabadDentists } from './dentist-directory';
 
-export async function runScheduledAutomation(admin: ReturnType<typeof createClient>) {
+export async function runScheduledAutomation(admin: SupabaseClient) {
   const { data: automation, error: automationError } = await admin.rpc('run_all_clinic_automation');
   if (automationError) throw new Error(automationError.message);
 
