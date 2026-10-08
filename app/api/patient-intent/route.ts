@@ -37,7 +37,8 @@ export async function POST(request:Request){
     const response=await fetch('https://generativelanguage.googleapis.com/v1beta/interactions',{
       method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
       body:JSON.stringify({model:'gemini-3.8-flash',input:'You are DentalCare patient-intent classifier. Classify this dental enquiry for dentist matching. Do not diagnose or prescribe. Infer only likely service/need, urgency and intent strength. Enquiry:\n'+query,response_format:{type:'text',mime_type:'application/json',schema},store:false}),
-      cache:'no-store'
+      cache:'no-store',
+      signal:AbortSignal.timeout(8000)
     });
     if(!response.ok) throw new Error('Gemini API '+response.status);
     const json=await response.json();
