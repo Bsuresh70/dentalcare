@@ -68,18 +68,10 @@ export default function PatientSearch(){
 
     if(error){setStatus(error.message);setLoading(false);return;}
 
-    // Phase 10 capture_patient_search_intent creates the single patient request
-    // and immediately runs the automatic dentist-assignment engine. Do NOT create
-    // a second patient request here.
-    const {data:intentRow,error:intentError}=await supabase
-      .from('patient_search_intents')
-      .select('patient_request_id')
-      .eq('id',intentId)
-      .maybeSingle();
-
-    if(intentError){setStatus(intentError.message);setLoading(false);return;}
-
-    const requestId=intentRow?.patient_request_id as string|undefined;
+    // Phase 10 capture_patient_search_intent creates the single patient request,
+    // runs automatic dentist assignment, and returns the patient request id.
+    // Do NOT create a second patient request here.
+    const requestId=intentId as string|undefined;
     if(!requestId){
       setStatus('Your enquiry was captured, but no eligible DentalCare clinic was available for automatic assignment.');
       setLoading(false);
