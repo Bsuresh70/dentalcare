@@ -21,12 +21,15 @@ export default function FindDentist(){
   const [selected,setSelected]=useState<Match[]>([]);
   const [requesting,setRequesting]=useState<string|null>(null);
   const [requestId,setRequestId]=useState<string|null>(null);
+  const [autoAssigned,setAutoAssigned]=useState(false);
 
   useEffect(()=>{
     const params=new URLSearchParams(window.location.search);
     const id=params.get('requestId');
     const treatment=params.get('treatment')||'';
     if(!id||!treatment)return;
+    const assigned=params.get('autoAssigned')==='1';
+    setAutoAssigned(assigned);
     const next={
       name:params.get('name')||'',
       phone:params.get('phone')||'',
@@ -43,6 +46,11 @@ export default function FindDentist(){
     };
     setForm(next);
     setRequestId(id);
+    if(assigned){
+      setLoading(false);
+      setStatus('Your enquiry has been sent to the best eligible DentalCare dentist. The clinic can now contact you.');
+      return;
+    }
     setLoading(true);
     setStatus('AI has understood your requirement. Finding suitable dentists…');
     supabase?.rpc('find_patient_matches',{p_request_id:id}).then(({data,error})=>{
@@ -140,7 +148,18 @@ export default function FindDentist(){
 
     {status&&<div className="toast">{status}</div>}
 
-    {matches.length>0&&<section className="panel">
+    {autoAssigned&&<section className="panel" style={{border:'1px solid #b8e6df',background:'#f0fbf9'}}>
+      <div className="panelHead">
+        <div>
+          <p className="eyebrow">REQUEST RECEIVED</p>
+          <h2>Your dental enquiry has been sent</h2>
+          <p className="muted">DentalCare automatically selected an eligible registered dentist based on your treatment requirement and enquiry details. You do not need to choose a dentist from a directory.</p>
+        </div>
+      </div>
+      <div className="patientNote"><strong>What happens next?</strong><span>The registered clinic can contact you to discuss the consultation and appointment. Diagnosis, treatment and final pricing remain with the dentist.</span></div>
+    </section>}
+
+    {!autoAssigned&&matches.length>0&&<section className="panel">
       <div className="panelHead"><div><h3>Suitable dentists</h3><p className="muted">Matches are ranked from your stated requirements. Prices are indicative; confirm the final treatment plan with the dentist.</p></div>{selected.length>0&&<span className="badge open">{selected.length}/3 selected</span>}</div>
       <div className="matchGrid">{matches.map((m,i)=><article className="matchCard" key={m.dentist_id+'-'+m.service_id}>
         <div className="matchTop"><span className="matchRank">{i+1}</span><span className="matchScore">{m.match_score}% match</span></div>
