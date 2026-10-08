@@ -51,7 +51,7 @@ export default function PatientSearch(){
     try{ detected=await detectIntent(query); setIntent(detected); }
     catch{ setStatus('AI analysis was unavailable. Please try again.'); setLoading(false); return; }
 
-    const {data,error}=await supabase.rpc('capture_patient_search_intent',{
+    const {data:intentId,error}=await supabase.rpc('capture_patient_search_intent',{
       p_search_query:query,
       p_detected_treatment:detected.treatment||'Dental consultation',
       p_detected_urgency:detected.urgency,
@@ -68,33 +68,41 @@ export default function PatientSearch(){
 
     if(error){setStatus(error.message);setLoading(false);return;}
 
-    const treatment=detected.treatment||'dental consultation';
-    const {data:reqId}=await supabase.rpc('create_public_patient_request',{
-      p_name:name,p_phone:phone,p_treatment:treatment,p_problem_description:query,
-      p_urgency:detected.urgency,p_city:city,p_pincode:pincode,
-      p_budget_min:null,p_budget_max:budget?Number(budget):null,
-      p_preferred_date:null,p_preferred_period:'Any time',p_preference_priority:'BALANCED'
-    });
+    // Phase 10 capture_patient_search_intent creates the single patient request
+    // and immediately runs the automatic dentist-assignment engine. Do NOT create
+    // a second patient request here.
+    const {data:intentRow,error:intentError}=await supabase
+      .from('patient_search_intents')
+      .select('patient_request_id')
+      .eq('id',intentId)
+      .maybeSingle();
 
-    setStatus(reqId
-      ? 'Your request is captured. We are finding suitable dentists for you. Please continue to the matching page.'
-      : 'Your enquiry is captured. We will help you find suitable dentists.');
+    if(intentError){setStatus(intentError.message);setLoading(false);return;}
+
+    const requestId=intentRow?.patient_request_id as string|undefined;
+    if(!requestId){
+      setStatus('Your enquiry was captured, but no eligible DentalCare clinic was available for automatic assignment.');
+      setLoading(false);
+      return;
+    }
+
+    const treatment=detected.treatment||'dental consultation';
+    setStatus('Your enquiry has been captured and sent to the best eligible DentalCare dentist. The clinic can now contact you.');
     setLoading(false);
 
-    if(reqId){
-      const params=new URLSearchParams({
-        requestId:String(reqId),
-        name,
-        phone,
-        treatment,
-        problem:query,
-        urgency:detected.urgency,
-        city,
-        pincode,
-        budgetMax:budget
-      });
-      window.location.href='/find-dentist?'+params.toString();
-    }
+    const params=new URLSearchParams({
+      requestId:String(requestId),
+      name,
+      phone,
+      treatment,
+      problem:query,
+      urgency:detected.urgency,
+      city,
+      pincode,
+      budgetMax:budget,
+      autoAssigned:'1'
+    });
+    window.location.href='/find-dentist?'+params.toString();
   }
 
   return <main className="page">
