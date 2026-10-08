@@ -2,6 +2,9 @@
 -- Patient is free. Only registered, subscribed DentalCare clinics can receive assigned enquiries.
 -- Safe to run after the existing Phase 7/8/9 SQL.
 
+alter table public.patient_requests add column if not exists intent_score integer not null default 0 check(intent_score between 0 and 100);
+alter table public.patient_requests add column if not exists source text default 'ORGANIC';
+
 create table if not exists public.clinic_subscriptions (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null unique references public.clinics(id) on delete cascade,
@@ -299,6 +302,7 @@ begin
   returning id into v_id;
 
   if v_request is not null then
+    update public.patient_requests set intent_score=greatest(0,least(coalesce(p_intent_score,0),100)), source=coalesce(nullif(trim(p_source),''),'ORGANIC') where id=v_request;
     perform public.assign_patient_request_to_best_dentist(v_request);
   end if;
 
