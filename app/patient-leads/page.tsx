@@ -63,6 +63,14 @@ export default function PatientLeads(){
 
   async function update(id:string,next:string){
     if(!supabase)return;
+    if(next==='BOOKED'){
+      const confirmed=window.confirm('Mark this enquiry as appointment-booked? DentalCare will create or reuse the patient record so it appears in Appointments. You can then select a date and time there.');
+      if(!confirmed)return;
+      const {error}=await supabase.rpc('book_patient_lead_assignment',{p_assignment_id:id});
+      setStatus(error?error.message:'Patient record created/linked. Open Appointments to schedule the visit.');
+      await load();
+      return;
+    }
     const revenue=next==='CONVERTED'?Number(prompt('Actual treatment revenue (₹):')||0):null;
     const {error}=await supabase.rpc('update_patient_lead_assignment',{p_assignment_id:id,p_status:next,p_revenue:revenue});
     setStatus(error?error.message:'Patient lead updated.');
