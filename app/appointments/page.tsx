@@ -31,16 +31,16 @@ export default function Appointments(){
     const id=await getCurrentClinicId();
     setClinicId(id);
     if(!id){setLoading(false);return;}
-    const [{data:ps},{data:ds},{data:ss},{data:as,error}] = await Promise.all([
+    const [{data:ps,error:pe},{data:ds,error:de},{data:ss,error:se},{data:as,error}] = await Promise.all([
       supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id).order('full_name'),
       supabase.from('dentists').select('id,name,specialty,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('services').select('id,name,default_price,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('appointments').select('id,patient_id,dentist_id,service_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
     ]);
     const queryErrors = [
-      ps?.error ? `Patients: ${ps.error.message}` : '',
-      ds?.error ? `Dentists: ${ds.error.message}` : '',
-      ss?.error ? `Services: ${ss.error.message}` : '',
+      pe ? `Patients: ${pe.message}` : '',
+      de ? `Dentists: ${de.message}` : '',
+      se ? `Services: ${se.message}` : '',
       error ? `Appointments: ${error.message}` : '',
     ].filter(Boolean);
     if(queryErrors.length) setStatus(queryErrors.join(' · '));
