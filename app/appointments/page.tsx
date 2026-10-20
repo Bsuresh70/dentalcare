@@ -21,6 +21,8 @@ export default function Appointments(){
   const [services,setServices]=useState<Service[]>([]);
   const [appointments,setAppointments]=useState<Appointment[]>([]);
   const [status,setStatus]=useState('');
+  const [revenueCheckId,setRevenueCheckId]=useState<string|null>(null);
+  const [revenueMessages,setRevenueMessages]=useState<Record<string,string>>({});
   const [loading,setLoading]=useState(true);
   const [selectedDate,setSelectedDate]=useState(new Date().toISOString().slice(0,10));
   const [calendarDentist,setCalendarDentist]=useState('ALL');
@@ -101,28 +103,37 @@ export default function Appointments(){
   }
 
   async function convertFromAppointment(a:Appointment){
-    if(!supabase||!clinicId) return;
-    if(a.status!=='COMPLETED'){setStatus('Only completed appointments can be attributed.');return;}
-    if(!a.patient_id){setStatus('This appointment has no linked patient, so revenue cannot be attributed.');return;}
+    if(revenueCheckId) return;
+    setRevenueCheckId(a.id);
+    setRevenueMessages(prev=>({...prev,[a.id]:'Checking appointment and patient revenue…'}));
+    try {
+      if(!supabase) throw new Error('Database connection is not available. Refresh the page and sign in again.');
+      if(!clinicId) throw new Error('The current clinic could not be identified. Refresh the page and sign in again.');
+      if(a.status!=='COMPLETED') throw new Error('Change the appointment status to COMPLETED first.');
+      if(!a.patient_id) throw new Error('This appointment has no linked patient, so revenue cannot be checked.');
 
-    setStatus('Checking revenue attribution…');
-    const {data:opps,error:oppsError}=await supabase.from('opportunities').select('id').eq('clinic_id',clinicId).eq('patient_id',a.patient_id).in('status',['OPEN','IN_PROGRESS','SNOOZED']).order('score',{ascending:false}).limit(1);
+      const [{data:patient,error:patientError},{data:completedAppointments,error:appointmentsError}] = await Promise.all([
+        supabase.from('patients').select('id,full_name,total_revenue').eq('id',a.patient_id).eq('clinic_id',clinicId).maybeSingle(),
+        supabase.from('appointments').select('id,estimated_value,status').eq('patient_id',a.patient_id).eq('clinic_id',clinicId).eq('status','COMPLETED')
+      ]);
+      if(patientError) throw new Error('Could not read patient revenue: '+patientError.message);
+      if(appointmentsError) throw new Error('Could not verify completed appointments: '+appointmentsError.message);
+      if(!patient) throw new Error('The linked patient record was not found in this clinic.');
 
-    if(oppsError){setStatus('Could not check linked opportunities: '+oppsError.message);return;}
-    if(opps?.[0]){
-      const {error:e}=await supabase.rpc('convert_opportunity',{p_opportunity_id:opps[0].id,p_revenue:Number(a.estimated_value||0)});
-      if(e){setStatus('Revenue could not be linked to the opportunity: '+e.message);return;}
-      setStatus('Revenue attributed to the patient opportunity: '+money(Number(a.estimated_value||0))+'.');
+      const totalCompletedValue=(completedAppointments||[]).reduce((sum,row)=>sum+Number(row.estimated_value||0),0);
+      const lifetimeRevenue=Number(patient.total_revenue||0);
+      const thisAppointmentValue=Number(a.estimated_value||0);
+      const message = Math.abs(lifetimeRevenue-totalCompletedValue)<0.01
+        ? 'Verified for '+patient.full_name+': this appointment is '+money(thisAppointmentValue)+'. Patient lifetime revenue is '+money(lifetimeRevenue)+'. Total value of completed appointments is '+money(totalCompletedValue)+'.'
+        : 'Revenue mismatch for '+patient.full_name+': lifetime revenue shows '+money(lifetimeRevenue)+', while completed appointments total '+money(totalCompletedValue)+'. No additional revenue was added to avoid double-counting. Please send this screenshot so we can fix the database trigger safely.';
+      setRevenueMessages(prev=>({...prev,[a.id]:message}));
       await load();
-      return;
+    } catch(err) {
+      const message=err instanceof Error?err.message:'An unexpected error occurred while checking revenue.';
+      setRevenueMessages(prev=>({...prev,[a.id]:'Could not check revenue: '+message}));
+    } finally {
+      setRevenueCheckId(null);
     }
-
-    // Completed appointment revenue is already synchronized to patients.total_revenue by the database trigger.
-    const {data:patient,error:patientError}=await supabase.from('patients').select('full_name,total_revenue').eq('id',a.patient_id).eq('clinic_id',clinicId).maybeSingle();
-    if(patientError){setStatus('No open opportunity was found, and patient revenue could not be verified: '+patientError.message);return;}
-    if(!patient){setStatus('No open opportunity was found, and the linked patient record could not be verified.');return;}
-    setStatus('No open opportunity was linked to '+patient.full_name+'. Appointment revenue is tracked automatically; current patient lifetime revenue: '+money(Number(patient.total_revenue||0))+'.');
-    await load();
   }
 
   return <main className="page">
@@ -197,7 +208,7 @@ export default function Appointments(){
         <td><strong>{a.dentist?.name||'—'}</strong><small>{a.service?.name||'No service selected'}</small></td>
         <td>{money(Number(a.estimated_value||0))}</td>
         <td><select value={a.status} onChange={e=>updateStatus(a,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>
-        <td>{a.status==='COMPLETED'?<button className="tableButton" onClick={()=>convertFromAppointment(a)}>Check revenue</button>:a.status==='NO_SHOW'||a.status==='CANCELLED'?<span className="badge open">FOLLOW-UP QUEUED</span>:<span className="muted">—</span>}</td>
+        <td>{a.status==='COMPLETED'?<div className="revenueCheckCell"><button type="button" className="tableButton" disabled={revenueCheckId!==null} onClick={()=>convertFromAppointment(a)}>{revenueCheckId===a.id?'Checking…':'Check revenue'}</button>{revenueMessages[a.id]&&<small role="status" aria-live="polite" style={{display:'block',minWidth:'240px',maxWidth:'360px',whiteSpace:'normal',marginTop:'8px',lineHeight:1.5}}>{revenueMessages[a.id]}</small>}</div>:a.status==='NO_SHOW'||a.status==='CANCELLED'?<span className="badge open">FOLLOW-UP QUEUED</span>:<span className="muted">—</span>}</td>
       </tr>)}</tbody></table>
     </div></section>
   </main>
