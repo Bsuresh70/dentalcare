@@ -15,6 +15,7 @@ const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency
 
 export default function Appointments(){
   const [clinicId,setClinicId]=useState<string|null>(null);
+  const [clinicName,setClinicName]=useState('');
   const [patients,setPatients]=useState<Patient[]>([]);
   const [dentists,setDentists]=useState<Dentist[]>([]);
   const [services,setServices]=useState<Service[]>([]);
@@ -30,14 +31,17 @@ export default function Appointments(){
     setLoading(true);
     const id=await getCurrentClinicId();
     setClinicId(id);
-    if(!id){setLoading(false);return;}
-    const [{data:ps,error:pe},{data:ds,error:de},{data:ss,error:se},{data:as,error}] = await Promise.all([
+    if(!id){setStatus('No clinic is linked to the signed-in account. Please check Clinic Setup.');setLoading(false);return;}
+    const [{data:clinicRow,error:ce},{data:ps,error:pe},{data:ds,error:de},{data:ss,error:se},{data:as,error}] = await Promise.all([
+      supabase.from('clinics').select('name').eq('id',id).maybeSingle(),
       supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id).order('full_name'),
       supabase.from('dentists').select('id,name,specialty,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('services').select('id,name,default_price,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('appointments').select('id,patient_id,dentist_id,service_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
     ]);
+    setClinicName(clinicRow?.name||'');
     const queryErrors = [
+      ce ? `Clinic: ${ce.message}` : '',
       pe ? `Patients: ${pe.message}` : '',
       de ? `Dentists: ${de.message}` : '',
       se ? `Services: ${se.message}` : '',
@@ -108,6 +112,7 @@ export default function Appointments(){
 
     {!supabase&&<div className="toast">Configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to use live data.</div>}
     {status&&<div className="toast">{status}</div>}
+    {clinicId&&<div className="patientNote"><strong>Current clinic: {clinicName||'Clinic name unavailable'}</strong><span>Patient records loaded for this clinic: {patients.length}. {patients.length===0?'If Balaji is visible under Patients but not here, the records may be linked to a different clinic.':''}</span></div>}
 
     <section className="statsRow">
       <div><span>Today's appointments</span><strong>{metrics.today}</strong></div>
