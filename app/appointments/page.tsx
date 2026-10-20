@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentClinicId } from '../../lib/clinic';
 
-type Patient={id:string;full_name:string;phone:string|null};
+type Patient={id:string;full_name:string;phone:string|null;total_revenue?:number|null};
 type Dentist={id:string;name:string;specialty:string|null;active:boolean};
 type Service={id:string;name:string;default_price:number|null;active:boolean};
 type Appointment={id:string;patient_id:string|null;dentist_id:string|null;service_id:string|null;scheduled_at:string;status:string;estimated_value:number;notes:string|null;patients?:Patient|null;dentist?:Dentist|null;service?:Service|null};
@@ -34,7 +34,7 @@ export default function Appointments(){
     if(!id){setStatus('No clinic is linked to the signed-in account. Please check Clinic Setup.');setLoading(false);return;}
     const [{data:clinicRow,error:ce},{data:ps,error:pe},{data:ds,error:de},{data:ss,error:se},{data:as,error}] = await Promise.all([
       supabase.from('clinics').select('name').eq('id',id).maybeSingle(),
-      supabase.from('patients').select('id,full_name,phone').eq('clinic_id',id).order('full_name'),
+      supabase.from('patients').select('id,full_name,phone,total_revenue').eq('clinic_id',id).order('full_name'),
       supabase.from('dentists').select('id,name,specialty,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('services').select('id,name,default_price,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('appointments').select('id,patient_id,dentist_id,service_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
@@ -92,26 +92,45 @@ export default function Appointments(){
     const {error}=await supabase.from('appointments').update({status:next}).eq('id',a.id);
     if(error){setStatus(error.message);return;}
     if(next==='NO_SHOW'||next==='CANCELLED'){
-      await supabase.rpc('create_followup_from_appointment',{p_appointment_id:a.id,p_channel:'WHATSAPP'});
+      const {error:followupError}=await supabase.rpc('create_followup_from_appointment',{p_appointment_id:a.id,p_channel:'WHATSAPP'});
+      if(followupError) setStatus('Appointment status updated, but follow-up could not be queued: '+followupError.message);
+      else setStatus('Follow-up queued for recovery.');
+    } else {
+      setStatus(next==='COMPLETED'?'Appointment completed. Patient lifetime revenue is updated automatically; use “Check revenue” to verify it.':'Appointment updated.');
     }
-    setStatus(next==='NO_SHOW'||next==='CANCELLED'?'Follow-up queued for recovery.':'Appointment updated.');
-    load();
+    await load();
   }
 
   async function convertFromAppointment(a:Appointment){
     if(!supabase||!clinicId) return;
-    const {data:opps,error}=await supabase.from('opportunities').select('id').eq('clinic_id',clinicId).eq('patient_id',a.patient_id).in('status',['OPEN','IN_PROGRESS','SNOOZED']).order('score',{ascending:false}).limit(1);
-    if(error||!opps?.[0]){setStatus('No open opportunity is linked to this patient.');return;}
-    const {error:e}=await supabase.rpc('convert_opportunity',{p_opportunity_id:opps[0].id,p_revenue:Number(a.estimated_value||0)});
-    setStatus(e?e.message:'Opportunity converted and revenue attributed.');
-    load();
+    if(a.status!=='COMPLETED'){setStatus('Only completed appointments can be attributed.');return;}
+    if(!a.patient_id){setStatus('This appointment has no linked patient, so revenue cannot be attributed.');return;}
+
+    setStatus('Checking revenue attribution…');
+    const {data:opps,error:oppsError}=await supabase.from('opportunities').select('id').eq('clinic_id',clinicId).eq('patient_id',a.patient_id).in('status',['OPEN','IN_PROGRESS','SNOOZED']).order('score',{ascending:false}).limit(1);
+
+    if(oppsError){setStatus('Could not check linked opportunities: '+oppsError.message);return;}
+    if(opps?.[0]){
+      const {error:e}=await supabase.rpc('convert_opportunity',{p_opportunity_id:opps[0].id,p_revenue:Number(a.estimated_value||0)});
+      if(e){setStatus('Revenue could not be linked to the opportunity: '+e.message);return;}
+      setStatus('Revenue attributed to the patient opportunity: '+money(Number(a.estimated_value||0))+'.');
+      await load();
+      return;
+    }
+
+    // Completed appointment revenue is already synchronized to patients.total_revenue by the database trigger.
+    const {data:patient,error:patientError}=await supabase.from('patients').select('full_name,total_revenue').eq('id',a.patient_id).eq('clinic_id',clinicId).maybeSingle();
+    if(patientError){setStatus('No open opportunity was found, and patient revenue could not be verified: '+patientError.message);return;}
+    if(!patient){setStatus('No open opportunity was found, and the linked patient record could not be verified.');return;}
+    setStatus('No open opportunity was linked to '+patient.full_name+'. Appointment revenue is tracked automatically; current patient lifetime revenue: '+money(Number(patient.total_revenue||0))+'.');
+    await load();
   }
 
   return <main className="page">
     <header className="pageHead"><div><p className="eyebrow">APPOINTMENT OPERATIONS</p><h1>Appointments</h1><p className="muted">Book, track and recover every appointment.</p></div></header>
 
     {!supabase&&<div className="toast">Configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to use live data.</div>}
-    {status&&<div className="toast">{status}</div>}
+    {status&&<div className="toast" role="status" aria-live="polite">{status}</div>}
     {clinicId&&<div className="patientNote"><strong>Current clinic: {clinicName||'Clinic name unavailable'}</strong><span>Patient records loaded for this clinic: {patients.length}. {patients.length===0?'If Balaji is visible under Patients but not here, the records may be linked to a different clinic.':''}</span></div>}
 
     <section className="statsRow">
@@ -179,7 +198,7 @@ export default function Appointments(){
         <td><strong>{a.dentist?.name||'—'}</strong><small>{a.service?.name||'No service selected'}</small></td>
         <td>{money(Number(a.estimated_value||0))}</td>
         <td><select value={a.status} onChange={e=>updateStatus(a,e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></td>
-        <td>{a.status==='COMPLETED'?<button className="tableButton" onClick={()=>convertFromAppointment(a)}>Attribute revenue</button>:a.status==='NO_SHOW'||a.status==='CANCELLED'?<span className="badge open">FOLLOW-UP QUEUED</span>:<span className="muted">—</span>}</td>
+        <td>{a.status==='COMPLETED'?<button className="tableButton" onClick={()=>convertFromAppointment(a)}>Check revenue</button>:a.status==='NO_SHOW'||a.status==='CANCELLED'?<span className="badge open">FOLLOW-UP QUEUED</span>:<span className="muted">—</span>}</td>
       </tr>)}</tbody></table>
     </div></section>
   </main>
