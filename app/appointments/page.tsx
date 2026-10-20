@@ -48,7 +48,6 @@ export default function Appointments(){
       error ? `Appointments: ${error.message}` : '',
     ].filter(Boolean);
     if(queryErrors.length) setStatus(queryErrors.join(' · '));
-    else setStatus('');
     const patientRows=(ps||[]) as Patient[];
     const dentistRows=(ds||[]) as Dentist[];
     const serviceRows=(ss||[]) as Service[];
