@@ -145,6 +145,7 @@ export default function PatientSearch(){
           <span className="muted">I agree that DentalCare may use my enquiry to find suitable dental providers and contact me about appointment options.</span>
         </label>
 
+        {status&&!submitted&&<div className="patientNote" role="status"><strong>Status</strong><span>{status}</span></div>}
         <button className="primary" type="submit" disabled={loading}>
           {loading?'Understanding your requirement…':'Find my dentist with AI'}
         </button>
