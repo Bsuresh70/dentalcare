@@ -37,7 +37,14 @@ export default function Appointments(){
       supabase.from('services').select('id,name,default_price,active').eq('clinic_id',id).eq('active',true).order('name'),
       supabase.from('appointments').select('id,patient_id,dentist_id,service_id,scheduled_at,status,estimated_value,notes').eq('clinic_id',id).order('scheduled_at',{ascending:false})
     ]);
-    if(error) setStatus(error.message);
+    const queryErrors = [
+      ps?.error ? `Patients: ${ps.error.message}` : '',
+      ds?.error ? `Dentists: ${ds.error.message}` : '',
+      ss?.error ? `Services: ${ss.error.message}` : '',
+      error ? `Appointments: ${error.message}` : '',
+    ].filter(Boolean);
+    if(queryErrors.length) setStatus(queryErrors.join(' · '));
+    else setStatus('');
     const patientRows=(ps||[]) as Patient[];
     const dentistRows=(ds||[]) as Dentist[];
     const serviceRows=(ss||[]) as Service[];
