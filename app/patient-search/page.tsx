@@ -35,6 +35,7 @@ export default function PatientSearch(){
   const [consent,setConsent]=useState(false);
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(false);
+  const [submitted,setSubmitted]=useState(false);
 
   const [intent,setIntent]=useState({treatment:'',urgency:'FLEXIBLE',intentScore:0,summary:'',ai:false,provider:''});
 
@@ -78,23 +79,28 @@ export default function PatientSearch(){
       return;
     }
 
-    const treatment=detected.treatment||'dental consultation';
-    setStatus('Your enquiry has been captured and sent to the best eligible DentalCare dentist. The clinic can now contact you.');
+    setStatus('Your enquiry has been received and assigned to an eligible DentalCare clinic. The clinic may contact you to discuss appointment options. Submitting this form does not itself book an appointment.');
     setLoading(false);
+    setSubmitted(true);
+    return;
+  }
 
-    const params=new URLSearchParams({
-      requestId:String(requestId),
-      name,
-      phone,
-      treatment,
-      problem:query,
-      urgency:detected.urgency,
-      city,
-      pincode,
-      budgetMax:budget,
-      autoAssigned:'1'
-    });
-    window.location.href='/find-dentist?'+params.toString();
+  if(submitted){
+    return <main className="page">
+      <header className="pageHead"><div>
+        <p className="eyebrow">DENTALCARE · PATIENT ENQUIRY</p>
+        <h1>Thank you, {name}. Your enquiry has been received.</h1>
+        <p className="muted">{status}</p>
+      </div></header>
+      <section className="panel" style={{maxWidth:900}}>
+        <h3>Enquiry summary</h3>
+        <p><strong>Likely treatment:</strong> {intent.treatment||'Dental consultation'}</p>
+        <p><strong>Urgency identified by AI:</strong> {intent.urgency.replace('_',' ')}</p>
+        <p><strong>Location:</strong> {city||'Not provided'} {pincode ? '· '+pincode : ''}</p>
+        <p className="muted">A clinic may contact you to discuss availability. An appointment is not booked until the clinic confirms it. DentalCare does not diagnose conditions; seek prompt professional care for severe or worsening symptoms.</p>
+        <button className="primary" onClick={()=>{setSubmitted(false);setStatus('');setQuery('');setName('');setPhone('');setPincode('');setBudget('');setConsent(false);setIntent({treatment:'',urgency:'FLEXIBLE',intentScore:0,summary:'',ai:false,provider:''});}}>Submit another enquiry</button>
+      </section>
+    </main>;
   }
 
   return <main className="page">
