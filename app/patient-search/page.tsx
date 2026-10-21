@@ -96,7 +96,7 @@ export default function PatientSearch(){
         <h3>Enquiry summary</h3>
         <p><strong>Likely treatment:</strong> {intent.treatment||'Dental consultation'}</p>
         <p><strong>Urgency identified by AI:</strong> {intent.urgency.replace('_',' ')}</p>
-        <p><strong>Location:</strong> {city||'Not provided'} {pincode ? '· '+pincode : ''}</p>
+        <p><strong>Preferred treatment city:</strong> {city||'Not provided'} {pincode ? '· '+pincode : ''}</p>
         <p className="muted">A clinic may contact you to discuss availability. An appointment is not booked until the clinic confirms it. DentalCare does not diagnose conditions; seek prompt professional care for severe or worsening symptoms.</p>
         <button className="primary" onClick={()=>{setSubmitted(false);setStatus('');setQuery('');setName('');setPhone('');setPincode('');setBudget('');setConsent(false);setIntent({treatment:'',urgency:'FLEXIBLE',intentScore:0,summary:'',ai:false,provider:''});}}>Submit another enquiry</button>
       </section>
@@ -130,11 +130,12 @@ export default function PatientSearch(){
         </div>
 
         <div className="formSection">
-          <h3>2. How can we contact you?</h3>
+          <h3>2. Where do you want treatment, and how can we contact you?</h3>
+          <p className="muted">DentalCare is designed for people worldwide seeking dental care in Hyderabad. Enter the city where you want treatment—not necessarily where you currently live.</p>
           <div className="formGrid">
             <input required placeholder="Your name" value={name} onChange={e=>setName(e.target.value)}/>
-            <input required placeholder="Mobile number" value={phone} onChange={e=>setPhone(e.target.value)}/>
-            <input placeholder="City" value={city} onChange={e=>setCity(e.target.value)}/>
+            <input required type="tel" autoComplete="tel" placeholder="Phone with country code (e.g. +1, +44, +91)" value={phone} onChange={e=>setPhone(e.target.value)}/>
+            <input required placeholder="City where you want treatment (e.g. Hyderabad)" value={city} onChange={e=>setCity(e.target.value)}/>
             <input placeholder="PIN code" value={pincode} onChange={e=>setPincode(e.target.value)}/>
             <input type="number" min="0" placeholder="Maximum budget ₹ (optional)" value={budget} onChange={e=>setBudget(e.target.value)}/>
           </div>
@@ -142,7 +143,7 @@ export default function PatientSearch(){
 
         <label style={{display:'flex',gap:10,alignItems:'flex-start',margin:'18px 0'}}>
           <input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>
-          <span className="muted">I agree that DentalCare may use my enquiry to find suitable dental providers and contact me about appointment options.</span>
+          <span className="muted">I consent to DentalCare sharing my enquiry and contact details with a suitable registered clinic, and contacting me about this enquiry by phone or message. I understand that an appointment is not confirmed until the clinic confirms it. I can ask DentalCare to stop further contact.</span>
         </label>
 
         {status&&!submitted&&<div className="patientNote" role="status"><strong>Status</strong><span>{status}</span></div>}
@@ -156,7 +157,7 @@ export default function PatientSearch(){
       <div className="panel">
         <h3>What happens next?</h3>
         <div className="action"><span className="actionIcon">1</span><div><strong>Understand</strong><small>Natural-language enquiry is converted into a structured patient need.</small></div></div>
-        <div className="action"><span className="actionIcon">2</span><div><strong>Match</strong><small>DentalCare considers treatment, location, budget and urgency.</small></div></div>
+        <div className="action"><span className="actionIcon">2</span><div><strong>Match</strong><small>DentalCare considers your requested treatment city, eligible clinic services, budget and urgency.</small></div></div>
         <div className="action"><span className="actionIcon">3</span><div><strong>Connect</strong><small>Suitable clinics can receive an appointment request.</small></div></div>
       </div>
       <div className="panel">
