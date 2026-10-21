@@ -85,7 +85,12 @@ export default function PatientLeads(){
     window.open('https://wa.me/'+d+'?text='+encodeURIComponent(message||''),'_blank','noopener,noreferrer');
   }
 
-  function actionFor(id:string){return actions.find(a=>a.assignment_id===id&&a.status==='PENDING')||actions.find(a=>a.assignment_id===id)||null;}
+  function actionFor(id:string){
+    const assignment=assignments.find(a=>a.id===id);
+    // Terminal lead states must not display stale pending contact recommendations.
+    if(assignment&&['CONVERTED','LOST'].includes(assignment.status))return null;
+    return actions.find(a=>a.assignment_id===id&&a.status==='PENDING')||actions.find(a=>a.assignment_id===id)||null;
+  }
 
   return <main className="page">
     <header className="pageHead">
