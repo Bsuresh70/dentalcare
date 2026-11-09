@@ -154,7 +154,7 @@ export default function PatientSearch(){
 
         <div className="formSection">
           <h3>2. Where do you want treatment, and how can we contact you?</h3>
-          <p className="muted">DentalCare is designed for people worldwide seeking dental care in Hyderabad. Enter the city where you want treatment—not necessarily where you currently live.</p>
+          <p className="muted">DentalGrowth AI currently matches local Hyderabad enquiries using your device location. Allow location only when you are physically near the Hyderabad area where you want treatment; if you are outside Hyderabad, the 10 km GPS match will not represent your intended treatment area.</p>
           <div className="formGrid">
             <input required placeholder="Your name" value={name} onChange={e=>setName(e.target.value)}/>
             <input required type="tel" autoComplete="tel" placeholder="Phone with country code (e.g. +1, +44, +91)" value={phone} onChange={e=>setPhone(e.target.value)}/>
