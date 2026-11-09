@@ -42,7 +42,8 @@ export default function PatientSearch(){
 
   async function submit(e:FormEvent){
     e.preventDefault();
-    if(!supabase){setStatus('Patient search is not configured yet.');return;}
+    const supabaseClient = supabase;
+    if(!supabaseClient){setStatus('Patient search is not configured yet.');return;}
     if(query.trim().length<8){setStatus('Please describe your dental need in a little more detail.');return;}
     if(!name.trim()||!phone.trim()){setStatus('Please enter your name and mobile number so a clinic can contact you.');return;}
     if(!consent){setStatus('Please allow DentalGrowth AI to share your enquiry with a suitable registered clinic.');return;}
@@ -54,7 +55,7 @@ export default function PatientSearch(){
     try{ detected=await detectIntent(query); setIntent(detected); }
     catch{ setStatus('AI analysis was unavailable. Please try again.'); setLoading(false); return; }
 
-    const {data:intentId,error}=await supabase.rpc('capture_patient_search_intent',{
+    const {data:intentId,error}=await supabaseClient.rpc('capture_patient_search_intent',{
       p_search_query:query,
       p_detected_treatment:detected.treatment||'Dental consultation',
       p_detected_urgency:detected.urgency,
@@ -87,7 +88,7 @@ export default function PatientSearch(){
     }
 
     navigator.geolocation.getCurrentPosition(async position=>{
-      const {data:assignmentId,error:locationError}=await supabase.rpc('finalize_patient_request_location',{
+      const {data:assignmentId,error:locationError}=await supabaseClient.rpc('finalize_patient_request_location',{
         p_intent_id:intentIdValue,
         p_latitude:position.coords.latitude,
         p_longitude:position.coords.longitude
