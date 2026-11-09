@@ -260,3 +260,46 @@ comment on function public.assign_patient_request_to_best_dentist(uuid) is
   'Offers a consented patient enquiry to one highest-ranked active dentist at a subscribed clinic within 10 km; repeated calls do not create concurrent offers.';
 comment on function public.advance_expired_patient_lead_offers() is
   'Trusted scheduler: expire unanswered 10-minute offers and advance to the next eligible clinic.';
+
+
+-- Browser geolocation hand-off: only an enquiry with recorded contact consent can
+-- attach the patient's approximate coordinates and start the 10 km allocation.
+create or replace function public.finalize_patient_request_location(
+  p_intent_id uuid,
+  p_latitude numeric,
+  p_longitude numeric
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_request uuid;
+  v_assignment uuid;
+begin
+  if p_latitude is null or p_longitude is null
+     or p_latitude < -90 or p_latitude > 90
+     or p_longitude < -180 or p_longitude > 180 then
+    raise exception 'Valid latitude and longitude are required.';
+  end if;
+
+  select patient_request_id into v_request
+  from public.patient_search_intents
+  where id=p_intent_id and consent_to_contact=true;
+
+  if v_request is null then
+    raise exception 'Consent-backed patient enquiry not found.';
+  end if;
+
+  update public.patient_requests
+  set latitude=p_latitude,longitude=p_longitude,
+      contact_consent=true,consent_captured_at=coalesce(consent_captured_at,now())
+  where id=v_request;
+
+  v_assignment := public.assign_patient_request_to_best_dentist(v_request);
+  return v_assignment;
+end;
+$$;
+
+revoke all on function public.finalize_patient_request_location(uuid,numeric,numeric) from public;
+grant execute on function public.finalize_patient_request_location(uuid,numeric,numeric) to anon,authenticated;
