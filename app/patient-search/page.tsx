@@ -32,7 +32,7 @@ export default function PatientSearch(){
   const [city,setCity]=useState('Hyderabad');
   const [pincode,setPincode]=useState('');
   const [budget,setBudget]=useState('');
-  const [consent,setConsent]=useState(false);
+  const [consent,setConsent]=useState(false);\n  const [locationConsent,setLocationConsent]=useState(false);
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(false);
   const [submitted,setSubmitted]=useState(false);
@@ -44,7 +44,7 @@ export default function PatientSearch(){
     if(!supabase){setStatus('Patient search is not configured yet.');return;}
     if(query.trim().length<8){setStatus('Please describe your dental need in a little more detail.');return;}
     if(!name.trim()||!phone.trim()){setStatus('Please enter your name and mobile number so a clinic can contact you.');return;}
-    if(!consent){setStatus('Please allow DentalCare to contact you about suitable dental options.');return;}
+    if(!consent){setStatus('Please allow DentalGrowth AI to share your enquiry with a suitable registered clinic.');return;}\n    if(!locationConsent){setStatus('Please allow location access so we can verify which registered dentists are within 10 km.');return;}
 
     setLoading(true);
     setStatus('AI is understanding your requirement and preparing suitable dentist options…');
@@ -69,19 +69,40 @@ export default function PatientSearch(){
 
     if(error){setStatus(error.message);setLoading(false);return;}
 
-    // Phase 10 capture_patient_search_intent creates the single patient request,
-    // runs automatic dentist assignment, and returns the patient request id.
-    // Do NOT create a second patient request here.
-    const requestId=intentId as string|undefined;
-    if(!requestId){
-      setStatus('Your enquiry was captured, but no eligible DentalCare clinic was available for automatic assignment.');
+    // capture_patient_search_intent returns the search-intent id. The database
+    // creates one patient request; geolocation then triggers strict 10 km matching.
+    const intentIdValue=intentId as string|undefined;
+    if(!intentIdValue){
+      setStatus('Your enquiry was captured, but its reference could not be confirmed. Please contact support.');
       setLoading(false);
       return;
     }
 
-    setStatus('Your enquiry has been received and assigned to an eligible DentalCare clinic. The clinic may contact you to discuss appointment options. Submitting this form does not itself book an appointment.');
-    setLoading(false);
-    setSubmitted(true);
+    if(!navigator.geolocation){
+      setStatus('Your enquiry was captured, but this browser cannot provide location for 10 km matching. Please use a location-enabled browser.');
+      setLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async position=>{
+      const {data:assignmentId,error:locationError}=await supabase.rpc('finalize_patient_request_location',{
+        p_intent_id:intentIdValue,
+        p_latitude:position.coords.latitude,
+        p_longitude:position.coords.longitude
+      });
+      if(locationError){
+        setStatus('Your enquiry was captured, but location matching could not be completed: '+locationError.message);
+      }else if(assignmentId){
+        setStatus('Your enquiry has been offered to the highest-ranked eligible registered dentist within 10 km. If the clinic does not respond within 10 minutes, the system will offer it to the next eligible clinic.');
+      }else{
+        setStatus('Your enquiry is safely recorded. No eligible subscribed dentist with verified location and matching treatment was found within 10 km yet.');
+      }
+      setLoading(false);
+      setSubmitted(true);
+    },()=>{
+      setStatus('Your enquiry was captured, but location permission was not granted. We need your location to enforce the 10 km dentist radius. Please try again and allow location access.');
+      setLoading(false);
+    },{enableHighAccuracy:false,timeout:12000,maximumAge:300000});
     return;
   }
 
@@ -98,7 +119,7 @@ export default function PatientSearch(){
         <p><strong>Urgency identified by AI:</strong> {intent.urgency.replace('_',' ')}</p>
         <p><strong>Preferred treatment city:</strong> {city||'Not provided'} {pincode ? '· '+pincode : ''}</p>
         <p className="muted">A clinic may contact you to discuss availability. An appointment is not booked until the clinic confirms it. DentalCare does not diagnose conditions; seek prompt professional care for severe or worsening symptoms.</p>
-        <button className="primary" onClick={()=>{setSubmitted(false);setStatus('');setQuery('');setName('');setPhone('');setPincode('');setBudget('');setConsent(false);setIntent({treatment:'',urgency:'FLEXIBLE',intentScore:0,summary:'',ai:false,provider:''});}}>Submit another enquiry</button>
+        <button className="primary" onClick={()=>{setSubmitted(false);setStatus('');setQuery('');setName('');setPhone('');setPincode('');setBudget('');setConsent(false);setLocationConsent(false);setIntent({treatment:'',urgency:'FLEXIBLE',intentScore:0,summary:'',ai:false,provider:''});}}>Submit another enquiry</button>
       </section>
     </main>;
   }
@@ -143,7 +164,11 @@ export default function PatientSearch(){
 
         <label style={{display:'flex',gap:10,alignItems:'flex-start',margin:'18px 0'}}>
           <input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>
-          <span className="muted">I consent to DentalCare sharing my enquiry and contact details with a suitable registered clinic, and contacting me about this enquiry by phone or message. I understand that an appointment is not confirmed until the clinic confirms it. I can ask DentalCare to stop further contact.</span>
+          <span className="muted">I consent to DentalGrowth AI sharing my enquiry and contact details with one suitable registered clinic at a time, and contacting me about this enquiry by phone or message. If the clinic does not respond within 10 minutes, my enquiry may be offered to the next suitable clinic. I understand that an appointment is not confirmed until the clinic confirms it.</span>
+        </label>
+        <label style={{display:'flex',gap:10,alignItems:'flex-start',margin:'10px 0 18px'}}>
+          <input type="checkbox" checked={locationConsent} onChange={e=>setLocationConsent(e.target.checked)}/>
+          <span className="muted">I consent to sharing my device location once for matching registered dentists within 10 km of me. My location is used for matching this enquiry.</span>
         </label>
 
         {status&&!submitted&&<div className="patientNote" role="status"><strong>Status</strong><span>{status}</span></div>}
