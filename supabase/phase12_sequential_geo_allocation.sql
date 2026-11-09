@@ -323,3 +323,8 @@ exception when insufficient_privilege then
   raise notice 'pg_cron exists but could not be scheduled; configure a trusted scheduled Edge Function.';
 end;
 $$;
+
+
+-- Prevent clients from invoking the allocator directly. Public capture and location
+-- finalization invoke it internally through SECURITY DEFINER functions.
+revoke all on function public.assign_patient_request_to_best_dentist(uuid) from public, anon, authenticated;
