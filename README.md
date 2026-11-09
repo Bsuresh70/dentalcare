@@ -83,3 +83,25 @@ Open `/login`, create a clinic through onboarding, then use **Appointments** and
 ## Deployment
 
 This repository is connected to Vercel for deployment from the `main` branch.
+
+
+## Phase 12 — Sequential 10 km Patient Lead Allocation
+
+Apply `supabase/phase12_sequential_geo_allocation.sql` after Phase 10 and Phase 11 migrations.
+
+This phase adds:
+- strict Haversine distance calculation using patient and clinic GPS coordinates
+- a 10 km maximum matching radius (missing coordinates never count as a match)
+- one active clinic offer at a time, ranked by treatment fit and other matching factors
+- a 10-minute response window
+- decline and timeout fallback to the next eligible subscribed clinic
+- clinic GPS capture in Clinic Setup
+- patient-side, explicit consent before using device location for matching
+- automatic expiry scheduling when Supabase `pg_cron` is available
+
+If `pg_cron` is unavailable, configure a trusted scheduled Edge Function to call
+`public.advance_expired_patient_lead_offers()` every minute using server-side credentials.
+Never expose the service-role key in browser code.
+
+External lead-source integrations remain opt-in/authorised integrations. DentalGrowth AI
+does not read private Google searches, private social messages, or private WhatsApp messages.
