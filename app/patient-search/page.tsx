@@ -32,7 +32,8 @@ export default function PatientSearch(){
   const [city,setCity]=useState('Hyderabad');
   const [pincode,setPincode]=useState('');
   const [budget,setBudget]=useState('');
-  const [consent,setConsent]=useState(false);\n  const [locationConsent,setLocationConsent]=useState(false);
+  const [consent,setConsent]=useState(false);
+  const [locationConsent,setLocationConsent]=useState(false);
   const [status,setStatus]=useState('');
   const [loading,setLoading]=useState(false);
   const [submitted,setSubmitted]=useState(false);
@@ -44,7 +45,8 @@ export default function PatientSearch(){
     if(!supabase){setStatus('Patient search is not configured yet.');return;}
     if(query.trim().length<8){setStatus('Please describe your dental need in a little more detail.');return;}
     if(!name.trim()||!phone.trim()){setStatus('Please enter your name and mobile number so a clinic can contact you.');return;}
-    if(!consent){setStatus('Please allow DentalGrowth AI to share your enquiry with a suitable registered clinic.');return;}\n    if(!locationConsent){setStatus('Please allow location access so we can verify which registered dentists are within 10 km.');return;}
+    if(!consent){setStatus('Please allow DentalGrowth AI to share your enquiry with a suitable registered clinic.');return;}
+    if(!locationConsent){setStatus('Please allow location access so we can verify which registered dentists are within 10 km.');return;}
 
     setLoading(true);
     setStatus('AI is understanding your requirement and preparing suitable dentist options…');
