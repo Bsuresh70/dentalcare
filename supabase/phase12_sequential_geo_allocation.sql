@@ -303,3 +303,23 @@ $$;
 
 revoke all on function public.finalize_patient_request_location(uuid,numeric,numeric) from public;
 grant execute on function public.finalize_patient_request_location(uuid,numeric,numeric) to anon,authenticated;
+
+
+-- Enable the 10-minute fallback automatically when pg_cron is available on the
+-- Supabase project. If pg_cron is not enabled, the trusted scheduler must call
+-- advance_expired_patient_lead_offers() every minute.
+do $$
+begin
+  if exists (select 1 from pg_namespace where nspname='cron') then
+    if not exists (select 1 from cron.job where jobname='dentalgrowth-expire-lead-offers') then
+      perform cron.schedule(
+        'dentalgrowth-expire-lead-offers',
+        '* * * * *',
+        'select public.advance_expired_patient_lead_offers();'
+      );
+    end if;
+  end if;
+exception when insufficient_privilege then
+  raise notice 'pg_cron exists but could not be scheduled; configure a trusted scheduled Edge Function.';
+end;
+$$;
