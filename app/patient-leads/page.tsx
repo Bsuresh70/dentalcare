@@ -61,6 +61,16 @@ export default function PatientLeads(){
 
   const visible=assignments.filter(a=>filter==='ALL'||(filter==='ACTIVE'?!['CONVERTED','LOST'].includes(a.status):a.status===filter));
 
+  async function decline(id:string){
+    if(!supabase)return;
+    const reason=window.prompt('Optional reason for declining this enquiry:')||'Not available';
+    const {error}=await supabase.rpc('decline_patient_lead_assignment',{
+      p_assignment_id:id,p_reason:reason
+    });
+    setStatus(error?error.message:'Enquiry declined. The next eligible clinic will be offered this lead.');
+    await load();
+  }
+
   async function update(id:string,next:string){
     if(!supabase)return;
     if(next==='BOOKED'){
@@ -134,6 +144,7 @@ export default function PatientLeads(){
           <div className="growthActions">
             {r?.phone&&<button className="primary small" onClick={()=>{window.open('tel:'+r.phone);}}>Call patient</button>}
             {r?.phone&&ai?.suggested_message&&<button className="tableButton" onClick={()=>wa(r.phone,ai.suggested_message)}>WhatsApp</button>}
+            {a.status==='ASSIGNED'&&<button className="tableButton" onClick={()=>decline(a.id)}>Decline lead</button>}
             {a.status==='ASSIGNED'&&<button className="tableButton" onClick={()=>update(a.id,'CONTACTED')}>Mark contacted</button>}
             {['ASSIGNED','CONTACTED'].includes(a.status)&&<button className="tableButton" onClick={()=>update(a.id,'BOOKED')}>Appointment booked</button>}
             {a.status==='BOOKED'&&<button className="tableButton" onClick={()=>update(a.id,'CONVERTED')}>Convert to paid patient</button>}
